@@ -39,10 +39,21 @@ const tools = localSketchTools([
 assert.deepEqual(tools.map(t => t.name), ['open', 'sketch', 'clear_sketch'], 'image, command and GUI-control tools are not offered to the text-only model');
 const open = tools.find(t => t.name === 'open');
 assert.equal(await open.execute({ target: 'https://example.com/path' }, context), 'Original open result');
+assert.equal(await open.execute({ target: 'https://www.google.com/search?q=weather+today' }, context), 'Original open result');
 assert.equal(await open.execute({ target: 'google chrome' }, context), 'Original open result');
-assert.deepEqual(openCalls, [{ target: 'https://example.com/path' }, { target: 'Google Chrome' }]);
+assert.equal(await open.execute({ target: 'browser' }, context), 'Original open result');
+assert.equal(await open.execute({ target: 'edge' }, context), 'Original open result');
+assert.equal(await open.execute({ target: 'chrome' }, context), 'Original open result');
+assert.deepEqual(openCalls, [
+  { target: 'https://example.com/path', app: 'Google Chrome' },
+  { target: 'https://www.google.com/search?q=weather+today', app: 'Google Chrome' },
+  { target: 'Google Chrome' },
+  { target: 'Google Chrome' },
+  { target: 'Microsoft Edge' },
+  { target: 'Google Chrome' },
+]);
 for (const value of [{ target: 'javascript:alert(1)' }, { target: 'file:///tmp/a' }, { target: 'https://user:pass@example.com' }, { target: 'https://@example.com' }, { target: 'Unknown App' }, { target: 'C:/app.exe' }, { target: 'Notepad /x' }, { target: 'https://example.com', app: 'Firefox' }]) await assert.rejects(open.execute(value, context));
-assert.equal(openCalls.length, 2);
+assert.equal(openCalls.length, 6);
 const diagram = { title: 'API request', narration: 'A client sends a request to a server.',
   nodes: [{ id: 'client', text: 'Client', shape: 'box' }, { id: 'api', text: 'API', shape: 'round' }],
   links: [{ from: 'client', to: 'api', label: 'request' }],
@@ -69,8 +80,13 @@ assert.doesNotMatch(JSON.stringify(cleaned), /private-image/);
 assert.match(JSON.stringify(original), /private-image/, 'existing saved history is not mutated');
 assert.match(localSystem({ user: 'Example', voice: true }), /cannot inspect images or screenshots/);
 assert.match(localSystem({ user: 'Example', voice: true }), /2D sketches/);
+assert.match(localSystem({ user: 'Example', voice: true }), /open with target "browser"/);
+assert.match(localSystem({ user: 'Example', voice: true }), /google\.com\/search\?q=/);
+assert.match(localSystem({ user: 'Example', voice: true }), /Do not use browser_search to open their Chrome/);
 assert.match(localSystem({ user: 'Example', voice: true, images: true }), /vision model/);
 assert.doesNotMatch(localSystem({ user: 'Example', voice: true, images: true }), /TEXT-ONLY/);
+assert.match(open.description, /target "browser"/);
+assert.match(open.description, /google\.com\/search\?q=/);
 const vl = { id: 'local/lmstudio/qwen2.5-vl-7b-instruct', name: 'Qwen2.5 VL 7B Instruct' };
 assert.equal(preferredLocalModel([{ id: PREFERRED_MODEL }, vl]), vl);
 assert.equal(preferredLocalModel([{ id: 'local/lmstudio/qwen2.5-vl-3b-instruct' }]), undefined);
