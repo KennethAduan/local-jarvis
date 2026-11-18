@@ -1,0 +1,21 @@
+# Jarvis notes
+
+Home: [KennethAduan/local-jarvis](https://github.com/KennethAduan/local-jarvis), branch `main`.
+
+Jarvis is this product. Source includes work originally published as Roamies; local LM Studio / Kokoro / JARVIS-only changes live here. Develop and open PRs only against this repo.
+
+AGPL-3.0-only, attribution, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) stay. The Node agent sidecar stays.
+
+## Defaults
+
+- JARVIS-only appearance. LM Studio at `http://127.0.0.1:1234/v1`; preferred model `qwen/qwen3-4b-2507`.
+- Startup skips the setup guide by default; guide remains in settings.
+- Text-only models: compact tools including bounded `sketch` / `clear_sketch`.
+- Data: `~/.kineto-roamies` (`ROAMIES_DATA_DIR` for tests). App id `com.kineto.roamies`, product **Jarvis**, wake **Hey Jarvis**.
+- Automatic updates off until this repo has a signed release feed.
+
+## Build
+
+See [README.md](README.md). Windows: Git Bash + current MSVC. `npm ci` / `npm test` in `showcase/tauri/sidecar`. Profile import after quit: `node import-profile.mjs --app-stopped --db <path>`.
+
+Windows speech: local **Kokoro** (British George). Model files live in the data directory (SHA-256 checked); not committed.
