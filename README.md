@@ -28,6 +28,30 @@ cd .. && ./build.sh dev
 ./build.sh
 ```
 
+### Development (debug binary)
+
+Use this when iterating on the sidecar or shell. Do not run the installed release `.exe` for day-to-day coding.
+
+**Windows: open Git Bash** (not Command Prompt or PowerShell). `bundle.sh` / `build.sh` are bash scripts.
+
+```bash
+cd showcase/tauri/sidecar
+npm ci
+npm run build
+cd ..
+./build.sh dev
+./src-tauri/target/debug/roamies.exe
+```
+
+If `npm run build` still fails under npm’s Windows shell, run `bash bundle.sh` in that folder instead.
+
+- First `./build.sh dev` is slow (voice, hands, and Kokoro helpers).
+- After sidecar JS changes: `npm run build` in `showcase/tauri/sidecar`, then restart `roamies.exe`.
+- Keep LM Studio’s local server on at `http://127.0.0.1:1234`.
+- Quit any installed Jarvis first so helpers and data do not clash.
+
+`./build.sh` (no `dev`) builds the release installer bundle.
+
 Agent layout and safety rules: [AGENTS.md](AGENTS.md).
 
 ## Privacy and security

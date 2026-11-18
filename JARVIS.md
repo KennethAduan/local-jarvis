@@ -16,6 +16,19 @@ AGPL-3.0-only, attribution, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ## Build
 
-See [README.md](README.md). Windows: Git Bash + current MSVC. `npm ci` / `npm test` in `showcase/tauri/sidecar`. Profile import after quit: `node import-profile.mjs --app-stopped --db <path>`.
+See [README.md](README.md) (includes **Development (debug binary)**). Windows: Git Bash + current MSVC. `npm ci` / `npm test` in `showcase/tauri/sidecar`. Profile import after quit: `node import-profile.mjs --app-stopped --db <path>`.
 
 Windows speech: local **Kokoro** (British George). Model files live in the data directory (SHA-256 checked); not committed.
+
+### Dev run (Windows)
+
+Use **Git Bash**, not Command Prompt or PowerShell. `build.sh` needs bash; `npm run build` calls `bash bundle.sh`.
+
+```bash
+cd showcase/tauri/sidecar && npm ci && npm run build
+# if npm’s shell still breaks: bash bundle.sh
+cd .. && ./build.sh dev
+./src-tauri/target/debug/roamies.exe
+```
+
+Sidecar JS change → rebuild sidecar → restart the debug binary. LM Studio at `http://127.0.0.1:1234`. Quit installed Jarvis first.

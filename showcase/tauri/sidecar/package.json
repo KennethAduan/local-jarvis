@@ -13,7 +13,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "./bundle.sh",
+    "build": "bash bundle.sh",
     "test": "node test/run.mjs",
     "test:live": "node bench/memory.mjs"
   },

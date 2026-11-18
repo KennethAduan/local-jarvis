@@ -82,7 +82,10 @@ const ui = (msg) => {
   send({ type: 'ui', msg });
 };
 const ob = (msg) => send({ type: 'onboard', msg });
-const say = (text, mood) => (onboarding ? ob({ kind: 'say', text, mood }) : ui({ kind: 'say', text, mood }));
+const say = (text, mood) => {
+  if (config.replies === 'voiceonly') return; // spoken replies stay audio-only; speakLine still talks
+  if (onboarding) ob({ kind: 'say', text, mood }); else ui({ kind: 'say', text, mood });
+};
 const sayOut = say;
 
 const VERSION = process.env.ROAMIES_VERSION || '0.0.0';
@@ -112,7 +115,7 @@ const DEFAULTS = {
   provider: null, model: null, sound: true, allowActions: false, skipAllow: false, voice: false,
   notch: 'off', // where I appear on a Mac with a notch: 'off' (beside the cursor, default), 'drop' (the capsule) or 'spread' (see notchMode)
   onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', introDone: false,
-  replies: 'text', // 'voice': spoken (with Fish Audio or Gemini) as well as shown
+  replies: 'text', // 'voice': spoken and shown; 'voiceonly': spoken with no bubbles
   tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (the VoiceStudio app on this computer)
   studioVoices: {}, // look → its VoiceStudio voice (a saved profile id; none: the selected engine's default voice)
   fishModel: FISH_CHOICES[0].id, // Drama 3 (most expressive) or S2.1 Pro (natural pace, cheaper)
@@ -607,9 +610,18 @@ function anim(name, args = {}) {
 // Tools that take long enough to need a spoken beat first.
 const SLOW_TOOLS = new Set(['web_search', 'web_fetch', 'see_photo', 'take_screenshot', 'read_window', 'act_in_app', 'run_command', 'search_files', 'list_windows']);
 // How replies are written: for bubbles (text only), or for the ear (spoken with Fish Audio or Gemini, details on screen).
-const VOICE_ON = () => config.replies === 'voice' && speech.on;
+const VOICE_ON = () => (config.replies === 'voice' || config.replies === 'voiceonly') && speech.on;
+const SHOW_TEXT = () => config.replies !== 'voiceonly';
 // VoiceStudio's engines would read voice cues out, so its prompt has no cue paragraph (and any cue left is removed).
-const replyStyle = () => (!VOICE_ON() ? TEXT_STYLE : tts().local ? VOICE_STYLE.replace(/^Your voice carries feeling:.*\n/m, '') : VOICE_STYLE);
+const replyStyle = () => {
+  if (!VOICE_ON()) return TEXT_STYLE;
+  let s = tts().local ? VOICE_STYLE.replace(/^Your voice carries feeling:.*\n/m, '') : VOICE_STYLE;
+  if (config.replies === 'voiceonly') {
+    s = s.replace('and shown in a small bubble, ', '')
+      .replace(/Anything to read rather than hear goes below what you say and is never read out:[^.]*\./, 'Nothing is shown on screen: say everything out loud, with no list lines, quote drafts or code blocks.');
+  }
+  return s;
+};
 const TEXT_STYLE = `You talk through small speech bubbles, so keep replies short: one to three sentences unless asked for detail. Light markdown shows properly (**bold** for the key word, \`code\` for commands and file names, [links](https://…)), but skip headings and tables in a bubble, and never narrate actions like *waves*. One exception: when the answer is genuinely a list, steps or a breakdown, it shows on a card beside you instead of a bubble. Then start with a one-sentence answer, follow with 3 to 6 short points as "- " lines (one fact each, under 20 words), and if you used the web this turn, end with a line "Sources: " and the site names as [name](url) links. A quick fact from the web (a score, a date, the weather, who someone is) stays a short bubble, with no points and no sources. Markdown renders on the card (bold, \`code\`, links, headings, tables, code blocks), so use what helps, but no preamble. Everything else stays a short bubble with no "- " lines. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines. An emoji now and then is fine; the bubbles show them. `;
 const VOICE_STYLE = `You talk out loud: what you write is spoken in your voice and shown in a small bubble, so write for the ear. Say one to three short sentences, the way you'd talk to a friend: plain words, contractions, about 6 to 20 words each. What you say has no markdown, emoji, links, file paths or code; name the site, file or app instead. Say numbers, times and money the way people say them. Anything to read rather than hear goes below what you say and is never read out: "- " lines for points, options or steps (3 to 6, one fact each, under 20 words), "> " lines for a draft they'll send or copy (an email, message or post), and a \`\`\` block for code. What they asked to hear (a story, a joke, advice) is spoken, not put on screen: say it, short (a story in 4 to 6 sentences). An explanation is spoken too, in a few sentences, with a drawing beside it when a picture carries it (see "Show, don't just tell"). An answer from the web is said like any other: a quick fact (a score, a date, the weather, who someone is) is just your sentences, no points and no sources. Only when the answer is genuinely a list, steps or a breakdown that's easier to read than hear, say it in one or two sentences, then the "- " points, then, if you used the web, a line "Sources: " with the site names as [name](url) links: those show on a card beside you and only your sentences are spoken. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines. Never say "here's a list" or read out what's on screen; a few words pointing to it are enough ("the steps are on screen").
 Your voice carries feeling: start a sentence with a voice cue in square brackets when the moment calls for it, and it's performed, never shown or read out. Moods: ${VOICE_CUES.emotions.filter((e) => !EMOTES.includes(e)).join(', ')}; soften or strengthen one with slightly, very or extremely ("[slightly sad]"), or pair two ("[warm and curious]"). How it's said, placed right before the words: ${VOICE_CUES.tones.join(', ')} ("It's [emphasis] today."). Sounds, followed by the sound in words: ${VOICE_CUES.sounds.join(', ')} ("[chuckling] Heh, fair enough.", "[sighing] Long day."). Pauses and background: ${VOICE_CUES.effects.join(', ')}. You can also describe the delivery in a few plain words when no single cue fits ("[quietly, a little embarrassed]", "[bright and bouncy]"). Act it: your voice really performs these, so let the feeling show. Match what's really happening: laugh at something funny, go gentle with bad news, whisper a secret, hurry when they're in a rush, light up at good news. Most replies want a voice cue somewhere, often on the first sentence, but at most one mood and one sound per sentence, never stack three, never use one just to fill, and keep shouting, screaming, sobbing and the background effects for when they truly fit.
@@ -1142,6 +1154,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     // released at a sentence end, since "On it, checking Paris." is a whole sentence; past 40 characters it's an answer.
     let beatText = voice ? '' : null, trimNext = false;
     const showText = (text) => {
+      if (!SHOW_TEXT()) return;
       if (trimNext) { text = text.replace(/^\s+/, ''); if (!text) return; trimNext = false; }
       ui({ kind: 'agent', e: { type: 'text', text } });
     };
@@ -1218,7 +1231,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
         use.calls++; use.in += u.inputTokens ?? 0; use.cacheRead += u.cacheRead ?? 0; use.cacheWrite += u.cacheWrite ?? 0; use.out += u.outputTokens ?? 0;
         if (process.env.ROAMIES_USAGE) console.error(`[usage] in=${u.inputTokens ?? '?'} cacheRead=${u.cacheRead ?? 0} cacheWrite=${u.cacheWrite ?? 0} out=${u.outputTokens ?? '?'}`);
       }
-      else if (e.type === 'thinking_delta') ui({ kind: 'agent', e: { type: 'thinking', text: e.text } });
+      else if (e.type === 'thinking_delta' && SHOW_TEXT()) ui({ kind: 'agent', e: { type: 'thinking', text: e.text } });
       // The opening line's last sentence waits for more text before it's spoken; a tool call starting means none is
       // coming, so say it now rather than once the call has fully streamed (a drawing can take 15 s on some models).
       else if (e.type === 'toolcall_delta') {
@@ -1426,7 +1439,7 @@ function openUrl(url) {
   execFile(cmd, args, () => {});
 }
 
-// ---------- replies: text only, or voice and text ----------
+// ---------- replies: text only, voice and text, or voice only (no bubbles) ----------
 // A new look brings its voice: it greets you in it (its "One sec." beats are made again).
 function setLook(l) {
   if (!LOOKS.some(([id]) => id === l)) return;
@@ -1448,21 +1461,23 @@ function setLook(l) {
 }
 
 async function setReplies(mode) {
+  if (!['text', 'voice', 'voiceonly'].includes(mode)) return;
   await voiceKeysLoaded;
-  if (mode === 'voice') await studioReady();
+  if (mode !== 'text') await studioReady();
   if (config.replies === mode) return;
   config.replies = mode; saveConfig();
   agentStale = true; // the spoken and written styles are different prompts
   if (mode === 'text') speech.stop();
   menu(); if (onboarding) obState();
   if (mode === 'voice') speakLine('Voice is on. This is how I sound.');
+  else if (mode === 'voiceonly') speakLine('Voice only. I talk, with no bubbles.');
   else say('Text only from now on.', 'happy');
 }
 
-// A line from the app itself (not the model), shown and spoken.
+// A line from the app itself (not the model), shown and spoken (spoken only when replies are voice-only).
 function speakLine(text, mood = 'happy') {
   say(text, mood);
-  const v = config.replies === 'voice' ? speech.start() : null;
+  const v = VOICE_ON() ? speech.start() : null;
   if (v && onboarding) guideVoices.add(v.id); // heard in the setup guide, where it was switched on
   if (v) { v.say(text); v.end(); }
 }
@@ -1477,7 +1492,7 @@ async function setTts(id) {
   menu(); if (onboarding) obState();
   if (TTS[id].local) {
     if (!(await studioReady())) return;
-    if (!VOICE_ON()) return say('Voice is ready. Turn on Voice and text to hear it.', 'happy');
+    if (!VOICE_ON()) return say('Voice is ready. Turn on Voice and text, or Voice only, to hear it.', 'happy');
   }
   if (VOICE_ON()) speakLine('This is how I sound.');
 }
@@ -1528,7 +1543,7 @@ async function removeVoiceKey(id = tts().id) {
   const used = t === tts();
   if (used) { speech.stop(); await useTts(id); } // Gemini falls back to the AI's Gemini key, if there is one
   else ttsKeys[id] = (await voiceKey(id).catch(() => [null, false]))[1];
-  if (used && !speech.on && config.replies === 'voice') { config.replies = 'text'; saveConfig(); agentStale = true; }
+  if (used && !speech.on && (config.replies === 'voice' || config.replies === 'voiceonly')) { config.replies = 'text'; saveConfig(); agentStale = true; }
   menu();
   say(`${t.name} key removed.${ttsKeys[id] === 'shared' ? " I'll use the Gemini key from the Model page." : used ? ' Replies are text only.' : ''}`, 'happy');
 }
@@ -1564,7 +1579,7 @@ async function voiceKeyLogin({ provider = tts().id, thenVoice = false, given = n
   }
   ttsKeys[t.id] = 'own';
   config.tts = t.id;
-  if (thenVoice || config.replies !== 'voice') config.replies = 'voice';
+  if (thenVoice || config.replies === 'text') config.replies = 'voice';
   saveConfig(); agentStale = true;
   menu(); if (onboarding) obState();
   voiceProblemAt = 0; // a new key's first failure is said straight away
@@ -1917,7 +1932,7 @@ function panelState() {
     commitments: openCommitments().map((c) => ({ id: c.id, text: c.text, due: c.due ?? null, when: c.due ? `${fmtWhen(c.due)}${c.repeat ? ` · repeats ${repeatLabel(c.repeat)}` : ''}` : '', overdue: !!(c.due && c.due < Date.now()), repeat: c.repeat ?? null })),
     look: config.look ?? 'classic', looks: LOOKS.map(([id, label]) => [id, label]), name: lookName(),
     size: sizeNow(), sizes: SIZES,
-    replies: VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
+    replies: config.replies === 'voiceonly' ? 'voiceonly' : VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
     fishModel: config.fishModel, fishModels: FISH_CHOICES, fishFree: tts().id === 'fish' && speech.on && speech.model.endsWith('-free'),
     geminiVoice: geminiVoice(), geminiVoices: GEMINI_VOICES, geminiShared: ttsKeys.gemini === 'shared',
     geminiModel: config.geminiModel, geminiModels: GEMINI_CHOICES,
@@ -2116,6 +2131,7 @@ async function onMenu(id, via) {
   else if (id.startsWith('look:')) setLook(id.slice(5));
   else if (id === 'replies:text') setReplies('text');
   else if (id === 'replies:voice') setReplies('voice');
+  else if (id === 'replies:voiceonly') setReplies('voiceonly');
   else if (id.startsWith('fishmodel:') && FISH_CHOICES.some((c) => c.id === id.slice(10))) {
     config.fishModel = id.slice(10); saveConfig(); speech.setModel(config.fishModel); menu();
   }

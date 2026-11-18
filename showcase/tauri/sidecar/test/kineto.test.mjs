@@ -14,6 +14,7 @@ assert.equal(PREFERRED_MODEL, 'local/lmstudio/qwen/qwen3-4b-2507');
 const migrated = normalizeForkConfig({ provider: 'openai', model: 'gpt-4', look: 'anime', tts: 'fish', sound: false });
 assert.deepEqual(migrated, { provider: 'local', model: PREFERRED_MODEL, look: 'jarvis', tts: 'kokoro', sound: false, replies: 'voice' });
 assert.equal(normalizeForkConfig({ tts: 'kokoro', replies: 'text', voice: false }).replies, 'text');
+assert.equal(normalizeForkConfig({ tts: 'kokoro', replies: 'voiceonly', voice: false }).replies, 'voiceonly');
 assert.equal(normalizeForkConfig({ tts: 'voicestudio', replies: 'text', voice: false }).replies, 'voice');
 assert.equal(normalizeForkConfig({ tts: 'voicestudio', voice: false }).voice, false);
 const other = 'local/lmstudio/qwen/qwen3-9b';

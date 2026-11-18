@@ -591,8 +591,8 @@
   function speakingPage() {
     const voice = state.studio ?? { checking: true };
     const status = voice.checking ? (voice.message || 'Checking voice?') : voice.ok ? 'Ready ? George, British English' : voice.message || 'Voice is unavailable.';
-    return [group('Spoken replies', 'Hear me as well as read me.', null,
-      picks('Replies', [['text', 'Text only'], ['voice', 'Voice and text']], state.replies, x => act(`replies:${x}`), 'replies', { text: 'I answer in writing only.', voice: 'I say my answers out loud too.' }),
+    return [group('Spoken replies', 'How I answer.', null,
+      picks('Replies', [['text', 'Text only'], ['voice', 'Voice and text'], ['voiceonly', 'Voice only']], state.replies, x => act(`replies:${x}`), 'replies', { text: 'I answer in writing only.', voice: 'I say my answers out loud too.', voiceonly: 'I talk only; no bubbles on screen.' }),
       el('div', { className: 'setting' },
         el('span', {}, 'Local voice', el('small', { role: 'status', className: !voice.ok && !voice.checking ? 'bad' : '', textContent: status })),
         el('span', { className: 'row-btns' },
