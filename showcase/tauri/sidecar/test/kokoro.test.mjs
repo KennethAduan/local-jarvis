@@ -41,10 +41,14 @@ assert.deepEqual(splitSpeech('😀'.repeat(241)).map(s => [...s].length), [240, 
  const out = [];
  class NativeFixture extends KokoroVoice { constructor(opts) { super({ ...opts, executable: 'fake', dir: 'unused', spawnImpl: spawnFake }); } }
  const speaker = createSpeaker({ emit: event => out.push(event), localId: 'kokoro', LocalVoiceImpl: NativeFixture, localStatus: async () => ({ ok: true }), beatPhrases: [], bundled: () => null });
- speaker.setProvider('kokoro'); const reply = speaker.start(); reply.say('Hello.'); reply.end(); const c = children.at(-1); respond(c, '1');
+ speaker.setProvider('kokoro'); speaker.setLocalVoice('21'); const reply = speaker.start(); reply.say('Hello.'); reply.end(); const c = children.at(-1);
+ assert.equal(c.requests[0].sid, 21);
+ respond(c, '1');
  assert.equal(speaker.provider, 'kokoro'); assert.ok(out.some(e => e.id === reply.id && e.rate === 24000 && e.pcm));
  assert.ok(out.some(e => e.id === reply.id && e.end));
- const next = speaker.start(); next.say('Stop.'); const stopped = children.at(-1); speaker.stop(); const before = out.length; respond(stopped, '1');
+ speaker.setLocalVoice('invalid'); const next = speaker.start(); next.say('Stop.'); const stopped = children.at(-1);
+ assert.equal(stopped.requests[0].sid, undefined, 'the default works with the original helper protocol');
+ speaker.stop(); const before = out.length; respond(stopped, '1');
  assert.equal(out.length, before); assert.ok(stopped.killed);
 }
 const dir = await mkdtemp(path.join(os.tmpdir(), 'kokoro-test-'));

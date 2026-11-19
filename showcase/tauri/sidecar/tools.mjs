@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createWebFetchTool, createWebSearchTool, runSideWebSearch, runSideWebSearchViaClaudeCode } from '@kenkaiiii/ggcoder/web';
 import { z } from 'zod';
 import { parseSipsSize, readProblem, rematch, sameBounds, shotFits, shotMap, shotProblem, shotUnits, snapRect, toScreen } from './pointing.mjs';
@@ -142,9 +143,16 @@ async function launchApp(name, hands) {
   const r = process.platform === 'win32' ? await winOpen(n) : await run('open', [...(process.env.ROAMIES_BG !== '0' ? ['-g'] : []), '-a', n]);
   if (r.err && /Unable to find application/i.test(r.stderr)) throw new Error(`There's no app called "${n}" on ${THIS_COMPUTER} (not installed, or it has another name). Don't look for it another way; say so and carry on with the rest.`);
   if (r.err) return false;
+  return waitForApp(n, hands);
+}
+
+async function waitForApp(name, hands, signal) {
   for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 200));
-    if (await hands('locate', `app:${n}`).then((r) => r?.ok !== false && r?.window, () => false)) { await new Promise((r) => setTimeout(r, 300)); return true; }
+    await delay(200, undefined, { signal });
+    if (await hands('locate', `app:${name}`).then((r) => r?.ok !== false && r?.window, () => false)) {
+      await delay(300, undefined, { signal });
+      return true;
+    }
   }
   return false;
 }
@@ -290,14 +298,20 @@ export function createTools({ allowActions, ui, ask, openUrl, onCommitments, foc
     }
     return res;
   }
-  async function readWindow(target = 'front') {
+  async function readWindow(target = 'front', { labelsOnly = false, waitForOpen } = {}) {
     const t = String(target || 'front');
+    if (waitForOpen && !(await waitForApp(t, hands, waitForOpen))) throw new Error(`Couldn’t find the ${t} window after opening it.`);
     const read = () => Promise.all([hands('ui', t === 'front' ? 'front' : `app:${t}`), hands('windows').catch(() => null)]);
     const [res, all] = await read().catch(async (err) => {
-      if (t === 'front' || !/No matching window/.test(String(err?.message ?? err)) || !(await launchApp(t, hands))) throw err;
+      if (waitForOpen || t === 'front' || !/No matching window/.test(String(err?.message ?? err)) || !(await launchApp(t, hands))) throw err;
       return read();
     });
     lastRead = { win: res.window.id, app: res.window.app, controls: res.controls, turn };
+    if (labelsOnly) return {
+      app: res.window.app,
+      title: res.window.title ?? '',
+      labels: [...new Set(res.controls.filter((c) => !c.offscreen && c.label).map((c) => c.label))],
+    };
     const others = (all?.windows ?? []).filter((w) => w.app === res.window.app && w.id !== res.window.id).length;
     const head = `${res.window.app}${res.window.title ? ` — ${res.window.title}` : ''}${others ? ` (front window; ${res.window.app} has ${others} more, which draw with text also searches)` : ''}`;
     if (!res.controls.length) return `${head}\n${res.note}`;
@@ -1064,5 +1078,5 @@ A drawing stays until the user clears it or the window changes; your next drawin
     const b = r?.window?.bounds;
     return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) ? b : null;
   }
-  return { tools, hands, whereNow, frontNow, frontBounds, ink: inkEvents, nextTurn: () => ++turn };
+  return { tools, hands, readWindow, whereNow, frontNow, frontBounds, ink: inkEvents, nextTurn: () => ++turn };
 }

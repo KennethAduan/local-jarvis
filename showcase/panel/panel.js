@@ -512,7 +512,7 @@
     { label: 'Accounts', pin: accounts.findIndex((p) => p.id === ui.key) });
     return [
       group('Model', 'Which AI answers you.', null,
-        select ?? el('p', { className: 'empty', textContent: 'Start LM Studio, load a tool-capable model, and start its server at http://127.0.0.1:1234/v1. Then connect below.' }),
+        select ?? el('p', { className: 'empty', textContent: `Load a tool-capable model and start LM Studio’s server at ${servers.find((server) => server.id === 'lmstudio')?.baseUrl ?? 'http://127.0.0.1:1234/v1'}. Then connect below.` }),
         toggle('Lite mode', 'For small or local models. Fewer features.', state.lite, () => act('lite'), 'lite')),
       el('div', { className: 'group paged' }, el('div', { className: 'ghead' }, el('h2', { textContent: 'LM Studio' }), el('p', { textContent: 'Local inference; web tools still use the internet.' })), box),
       foot(null, nav),
@@ -524,7 +524,7 @@
     const remove = armed(x.custom ? 'Remove' : 'Disconnect', 'Confirm', `local:remove:${x.id}`, `local:remove:${x.id}`, `${x.custom ? 'Remove' : 'Disconnect'} ${x.label}`);
     return el('li', { className: 'acct' },
       el('div', { className: 'setting' },
-        // An added server's address is in its name's tooltip, so every row stays one line.
+        // The server's address is in its name's tooltip.
         el('span', { className: 'acct-name' }, el('span', { className: 'acct-label', 'data-tip': x.baseUrl ?? null, tabIndex: x.baseUrl ? 0 : null, 'aria-describedby': x.baseUrl ? `addr-${x.id}` : null }, x.label, x.baseUrl ? el('span', { className: 'sr-only', id: `addr-${x.id}`, textContent: x.baseUrl }) : null),
           x.on ? el('span', { className: 'led on', role: 'img', 'aria-label': 'Connected', 'data-tip': 'Connected' }) : null),
         el('span', { className: 'row-btns' }, connect(x))),
@@ -558,6 +558,8 @@
     return [
       group('Look', 'Each look has its own name and voice.', null, lookTiles()),
       group('Size', 'How big I am on your screen.', null, picks('Size', state.sizes, state.size, (x) => act(`size:${x}`), 'size', SIZE_TIPS)),
+      group('Stage', 'Fill the screen with me.', null,
+        toggle('Whole screen', 'Large centered JARVIS. Size still applies when you leave.', !!state.wholeScreen, () => act('wholescreen'), 'wholescreen')),
     ];
   }
   // The looks as live tiles: each one's character, playing, at the size picked below. Kept between renders (a state update mustn't restart
@@ -590,7 +592,7 @@
   }
   function speakingPage() {
     const voice = state.studio ?? { checking: true };
-    const status = voice.checking ? (voice.message || 'Checking voice?') : voice.ok ? 'Ready ? George, British English' : voice.message || 'Voice is unavailable.';
+    const status = voice.checking ? (voice.message || 'Checking voice…') : voice.ok ? 'Ready · British English' : voice.message || 'Voice is unavailable.';
     return [group('Spoken replies', 'How I answer.', null,
       picks('Replies', [['text', 'Text only'], ['voice', 'Voice and text'], ['voiceonly', 'Voice only']], state.replies, x => act(`replies:${x}`), 'replies', { text: 'I answer in writing only.', voice: 'I say my answers out loud too.', voiceonly: 'I talk only; no bubbles on screen.' }),
       el('div', { className: 'setting' },
@@ -598,7 +600,12 @@
         el('span', { className: 'row-btns' },
           !voice.ok && !voice.checking && voice.reason !== 'unavailable' ? link('Install', () => act('kokoro_install'), { k: 'kokoro_install', aria: 'Install local voice' }) : null,
           !voice.checking ? link('Check again', () => act('kokoro_check'), { k: 'kokoro_check', aria: 'Check local voice again' }) : null,
-          voice.ok ? link('Preview', () => act('kokoro_preview'), { k: 'kokoro_preview', aria: 'Preview local voice' }) : null)),
+          voice.ok ? link('Preview', () => act('kokoro_preview'), { k: 'kokoro_preview', aria: 'Preview selected voice' }) : null)),
+      voice.ok && voice.voices?.length ? el('label', { className: 'setting' },
+        el('span', { textContent: 'Voice' }),
+        el('span', { className: 'px field select' },
+          el('select', { 'data-k': 'kokoro-voice', on: { change: (e) => act(`studiovoice:${e.target.value}`) } },
+            voice.voices.map(({ id, name }) => el('option', { value: id, textContent: name, selected: id === voice.voice }))))) : null,
       el('p', { className: 'why', textContent: 'Speech is generated on this computer.' }))];
   }
   // Which mic I listen on (from #59, by overspend1): automatic (the system's default, or on a Mac the built-in mic while
@@ -994,7 +1001,7 @@
     if (q.has('checking')) s.update.checking = true;
     // ?studio: VoiceStudio is the voice provider (?studio=off: it isn't running; ?studio=engine: its engine isn't ready; ?studio=empty: no saved voices).
     const STUDIO = {
-      on: { ok: true, engine: 'OmniVoice', voices: [{ id: 'a642d572', name: 'Ben' }, { id: 'fa08aff1', name: 'British · Female · Young Adult · High' }], voice: 'fa08aff1' },
+      on: { ok: true, engine: 'Kokoro', voices: [{ id: '26', name: 'George' }, { id: '21', name: 'Emma' }], voice: '26' },
       empty: { ok: true, engine: 'KittenTTS', voices: [], voice: null },
       off: { ok: false, reason: 'offline', message: 'Install the voice in Speaking settings.' },
       engine: { ok: false, reason: 'engine', message: 'Install the voice in Speaking settings.' },

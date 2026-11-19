@@ -52,9 +52,8 @@ fn public_pack_synthesizes_sequential_pcm() {
         .spawn()
         .unwrap();
     let mut input = child.stdin.take().unwrap();
-    for id in ["first", "second"] {
-        writeln!(input, "{{\"id\":\"{id}\",\"text\":\"Hello, I am Jarvis. All systems are ready.\",\"speed\":1.15,\"volume\":1}}").unwrap();
-    }
+    writeln!(input, r#"{{"id":"first","text":"Hello, I am Jarvis. All systems are ready.","speed":1.15,"volume":1}}"#).unwrap();
+    writeln!(input, r#"{{"id":"second","text":"Hello, I am Jarvis. All systems are ready.","speed":1.15,"volume":1,"sid":21}}"#).unwrap();
     drop(input);
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
@@ -64,6 +63,7 @@ fn public_pack_synthesizes_sequential_pcm() {
         .filter(|b| !b.is_empty())
         .collect();
     assert_eq!(lines.len(), 2);
+    let mut samples = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         let v: serde_json::Value = serde_json::from_slice(line).unwrap();
         assert_eq!(v["id"], if index == 0 { "first" } else { "second" });
@@ -74,5 +74,7 @@ fn public_pack_synthesizes_sequential_pcm() {
         assert!(pcm
             .chunks_exact(2)
             .any(|p| i16::from_le_bytes([p[0], p[1]]).unsigned_abs() > 100));
+        samples.push(pcm);
     }
+    assert_ne!(samples[0], samples[1], "speaker choice changes the audio");
 }

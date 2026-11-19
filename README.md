@@ -1,6 +1,6 @@
 # Jarvis
 
-Local desktop JARVIS. Inference via [LM Studio](https://lmstudio.ai) on loopback. Spoken replies via local Kokoro. Your data stays under `~/.kineto-roamies` by default.
+Local desktop JARVIS. Inference via [LM Studio](https://lmstudio.ai). Spoken replies via local Kokoro. Your data stays under `~/.kineto-roamies` by default.
 
 **Repo:** [KennethAduan/local-jarvis](https://github.com/KennethAduan/local-jarvis)  
 **Branch:** `main`
@@ -51,6 +51,16 @@ If `npm run build` still fails under npm’s Windows shell, run `bash bundle.sh`
 - Quit any installed Jarvis first so helpers and data do not clash.
 
 `./build.sh` (no `dev`) builds the release installer bundle.
+
+### LM Studio on another computer
+
+In LM Studio on the host PC, enable **Serve on Local Network** and start its API server. Quit any running Jarvis instance, then launch the Mac debug build from the repository root. Replace `192.168.1.42` with the PC's LAN address.
+
+```bash
+JARVIS_LMSTUDIO_URL=http://192.168.1.42:1234/v1 ./showcase/tauri/src-tauri/target/debug/roamies
+```
+
+If the server requires authentication, set `JARVIS_LMSTUDIO_API_TOKEN` in the launch environment too. Without a URL override, Jarvis uses `http://127.0.0.1:1234/v1`.
 
 Agent layout and safety rules: [AGENTS.md](AGENTS.md).
 

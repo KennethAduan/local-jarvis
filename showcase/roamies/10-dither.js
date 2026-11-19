@@ -26,6 +26,10 @@
       const { clamp, rand } = Roamie;
       const S = (n) => Roamie.sfx?.play(n);
       const PAL = o.pal, L = PAL.length - 1;
+      const basePal = PAL.map((c) => c.slice());
+      // Electric cyan HUD palette (reference cockpit), swapped in while whole-screen is on.
+      const stagePal = [[0, 16, 40], [0, 90, 160], [0, 170, 230], [90, 230, 255], [210, 248, 255]];
+      const applyPal = (src) => { for (let i = 0; i < PAL.length && i < src.length; i++) { PAL[i][0] = src[i][0]; PAL[i][1] = src[i][1]; PAL[i][2] = src[i][2]; } };
       const { n: PN, t: PT } = PATTERNS[o.pattern ?? 'bayer4'], PM = PN - 1;
       // The dither pattern is pinned to the screen, or to the body while it follows the cursor (tox, toy: its cell),
       // so the shading doesn't crawl across it as it moves.
@@ -46,7 +50,7 @@
       const forced = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('act') : null;
       // Size: 'default', 'small' (half the body) or 'cursor' (a pixel arrow pointer). Text keeps its size either way.
       let form = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('form')) || 'default', lastEnv = null;
-      let userForm = form;
+      let userForm = form, staged = false;
       // Look: 'classic' (the goo blob, and the arrow at cursor size), 'jarvis' (roamies/jarvis.js: a globe of
       // points with a lit heart, and a HUD reticle at cursor size) or a character from roamies/people.js
       // ('anime', 'sarah', 'adrian', 'rita'). Moves, sizes and everything else are shared.
@@ -585,7 +589,14 @@
         wheel: (dy) => plug?.wheel?.(dy),
         get form() { return form; },
         // The user's size. While a drawing holds it as its cursor, it changes back to this one when it's let go.
-        setForm(f) { userForm = ['small', 'cursor'].includes(f) ? f : 'default'; if (!plug?.ghost?.()) swapForm(userForm); },
+        setForm(f) { userForm = ['small', 'cursor'].includes(f) ? f : 'default'; if (!plug?.ghost?.() && !staged) swapForm(userForm); },
+        setStage(on) {
+          staged = !!on;
+          applyPal(staged ? stagePal : basePal);
+          if (staged && form === 'cursor') swapForm('default');
+          else if (!staged) swapForm(userForm);
+          else if (lastEnv) self.resize(lastEnv);
+        },
         ghost: () => !!plug?.ghost?.(),
         morph,
         get look() { return look; },
@@ -599,7 +610,14 @@
           IW = gw * K; IH = gh * K;
           off.width = IW; off.height = IH; img = octx.createImageData(IW, IH); u32 = new Uint32Array(img.data.buffer); pd = null;
           if (bloom) { bloom.width = Math.ceil(gw / 4); bloom.height = Math.ceil(gh / 4); }
-          R = form === 'cursor' ? 26 : clamp(S * 0.15, 28, 140) * (form === 'small' ? 0.5 : 1); m.radius = R * (o.ears || o.antenna ? 1.35 : 1.25);
+          if (staged && form !== 'cursor') {
+            // Centered presence, not stretched: ~22% of the short edge, capped so HUD panels and chat keep room.
+            R = clamp(Math.min(env.w, env.h) * 0.22, 110, 200);
+          } else {
+            R = form === 'cursor' ? 26 : clamp(S * 0.15, 28, 140) * (form === 'small' ? 0.5 : 1);
+          }
+          // Hit radius stays modest while staged so the ask bar / bubbles aren't swallowed by the body disc.
+          m.radius = staged ? Math.min(R * 1.15, 160) : R * (o.ears || o.antenna ? 1.35 : 1.25);
         },
         boop() { sq.kick(11); S('boop'); if (ant) ant.forEach((p, i) => { p.vx += rand(-1, 1) * 260 * i; }); if (!forced) startAct('hype', true); },
         grab() { S('grab'); },
@@ -844,8 +862,9 @@
           }
           plug?.gridOver?.(env);
           pd = dx1 >= dx0 ? [dx0, dy0, dx1 + 1, dy1 + 1] : null;
-          // Tools, guides and cards also draw outside the grid, so they get the whole screen.
-          if (!clear || plug?.wide?.()) rect = [0, 0, gw, gh];
+          // Whole-screen stage needs the LED canvas itself to cover the monitor: opaque HUD pixels must be painted
+          // here (WebView2 punches clearRect holes straight to the desktop, not to HTML underneath).
+          if (!clear || staged || plug?.wide?.()) rect = [0, 0, gw, gh];
           else if (pd) {
             // Four empty cells of margin for the glow, on a 4-cell lattice so the blur sits still as it moves;
             // the CRT effect stretches the picture (up to 1.3x) and glows around the body, so it gets more.
@@ -866,7 +885,8 @@
           // A fingerprint of the picture: the lit cells, where the patch sits and the glide offset. NaN (never equal)
           // whenever something is also drawn outside the grid or the CRT effect is playing.
           let sig = NaN;
-          if (clear && pd && !performing && !crtXform() && !mo && (!plug || plug.quiet?.())) {
+          // Stage mode always redraws (dark room + living globe).
+          if (clear && pd && !staged && !performing && !crtXform() && !mo && (!plug || plug.quiet?.())) {
             let h = 2166136261 ^ (rect[0] * 73856093) ^ (rect[1] * 19349663) ^ (rect[2] * 83492791) ^ rect[3];
             for (let y = pd[1] * K; y < pd[3] * K; y++) for (let i = y * IW + pd[0] * K, e = y * IW + pd[2] * K; i < e; i++) h = Math.imul(h ^ u32[i], 16777619);
             const glide = !!m.drive && pres.state === 'shown';
@@ -882,6 +902,18 @@
           const had = ready; ready = false;
           if (!had || !rect) return;
           const bx = m.x + ox, by = m.y + oy;
+          if (staged) {
+            const voice = Math.max(0.12, Math.min(1, (Roamie.voiceOut?.level?.() ?? 0) || (m.mode === 'talk' ? 0.55 : 0.18)));
+            Roamie.stage?.paint?.(ctx, {
+              w: env.w, h: env.h, cx: bx, cy: by, r: R, t,
+              voice, reduced: !!env.reduced,
+            });
+            // Speech bubbles, tool tags, and permission prompts still draw. LED blit stays below this return.
+            // Save/restore matches the unstaged over() path so a plugin cannot leak transform or alpha. No glide while staged.
+            ctx.save();
+            try { plug?.over?.(ctx, env); } finally { ctx.restore(); }
+            return; // holographic core is the face — do not draw dither LED body
+          }
           const [cx0, cy0, cx1, cy1] = rect;
           const sx = cx0 * K, sy = cy0 * K, sw = (cx1 - cx0) * K, sh = (cy1 - cy0) * K;
           const X = cx0 * P, Y = cy0 * P, DW = (cx1 - cx0) * P, DH = (cy1 - cy0) * P;
@@ -949,6 +981,8 @@
           }
         },
       };
+      // Agent kit is built before `self`; wire stage sizing through so setWholeScreen can grow the body.
+      kit.setStage = (on) => self.setStage(on);
       return self;
     },
   });

@@ -321,6 +321,18 @@ fn to_sidekick_buddy(app: &AppHandle, msg: &Value) {
     }
 }
 
+/// Whole-screen mode: paint an opaque backdrop behind the web content (Windows transparent WebViews
+/// punch clear pixels straight to the desktop, so canvas alone cannot cover wallpaper).
+#[tauri::command]
+fn stage_cover(window: WebviewWindow, on: bool) -> Result<(), String> {
+    let color = if on {
+        tauri::window::Color(0, 8, 20, 255)
+    } else {
+        tauri::window::Color(0, 0, 0, 0)
+    };
+    window.set_background_color(Some(color)).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn sidecar_send(app: AppHandle, msg: Value) {
     to_sidecar(&app, &msg);
@@ -1859,7 +1871,7 @@ fn main() {
         .manage(TalkChord(Mutex::new(vec!["control".into(), "option".into()])))
         .manage(VoiceModel(Mutex::new(None)))
         .manage(PermGuide(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![buddy, ink_wait, set_hot, set_hit_rects, sidecar_send, set_typing, perm_status, perm_request, perm_guide, screen_check, open_settings, onboarding_finish, guide_close, panel_hide, esc_watch, relaunch, focus_guide, guide_aside, drag_window])
+        .invoke_handler(tauri::generate_handler![buddy, ink_wait, set_hot, set_hit_rects, stage_cover, sidecar_send, set_typing, perm_status, perm_request, perm_guide, screen_check, open_settings, onboarding_finish, guide_close, panel_hide, esc_watch, relaunch, focus_guide, guide_aside, drag_window])
         .on_menu_event(|app, e| match e.id.as_ref() {
             "quit" => app.exit(0),
             "restart" => spawn_sidecar(app),

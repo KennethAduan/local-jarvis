@@ -17,6 +17,7 @@ use std::{
 const MAX_LINE: usize = 8192;
 const MAX_TEXT: usize = 240;
 const RATE: usize = 24_000;
+const DEFAULT_SPEAKER: i32 = 26;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
@@ -24,6 +25,11 @@ struct Request {
     text: String,
     speed: f32,
     volume: f32,
+    #[serde(default = "default_speaker")]
+    sid: i32,
+}
+fn default_speaker() -> i32 {
+    DEFAULT_SPEAKER
 }
 impl Request {
     fn validate(&self) -> Result<(), &'static str> {
@@ -41,6 +47,9 @@ impl Request {
         }
         if !self.volume.is_finite() || !(0.0..=1.5).contains(&self.volume) {
             return Err("Invalid speech volume");
+        }
+        if !(20..=27).contains(&self.sid) {
+            return Err("Invalid speech voice");
         }
         Ok(())
     }
@@ -85,7 +94,7 @@ impl Engine {
             .generate_with_config(
                 "",
                 &GenerationConfig {
-                    sid: 26,
+                    sid: request.sid,
                     speed: request.speed,
                     phoneme_codepoints: Some(vec![phones]),
                     ..Default::default()
@@ -217,6 +226,8 @@ mod tests {
             r#"{"id":"x","text":"x\u0000","speed":1,"volume":1}"#,
             r#"{"id":"x","text":"x","speed":0.74,"volume":1}"#,
             r#"{"id":"x","text":"x","speed":1,"volume":1.51}"#,
+            r#"{"id":"x","text":"x","speed":1,"volume":1,"sid":19}"#,
+            r#"{"id":"x","text":"x","speed":1,"volume":1,"sid":28}"#,
             r#"{"id":"x","text":"x","speed":1,"volume":1,"extra":true}"#,
         ] {
             let value = response(Ok(raw.as_bytes().to_vec()), &mut None, Path::new("invalid"));
@@ -227,6 +238,7 @@ mod tests {
             text: "a".repeat(241),
             speed: f32::NAN,
             volume: 1.,
+            sid: DEFAULT_SPEAKER,
         };
         assert!(req.validate().is_err());
     }

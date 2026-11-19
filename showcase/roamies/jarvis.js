@@ -14,7 +14,8 @@
     const y = 1 - (2 * (i + 0.5)) / n, r = Math.sqrt(1 - y * y), a = i * 2.39996;
     return [Math.cos(a) * r, y, Math.sin(a) * r];
   });
-  const DOTS = { default: sphere(520), small: sphere(260) };
+  // Stage mode uses a denser globe so a near-fullscreen sphere still reads as solid LEDs.
+  const DOTS = { default: sphere(520), small: sphere(260), stage: sphere(1600) };
 
   // HUD glyphs for the blob's moments, drawn as read-outs beside the globe: heart, bolt, alarm, anger, flame.
   const GLYPH = {
@@ -41,11 +42,12 @@
     // cx, cy are cells; rad the radius in cells. put(x, y, level) writes a cell, the brightest write wins.
     body(k, cx, cy, rad, st) {
       const { put, L, th } = k, t = st.t;
-      const dots = rad < 9 ? DOTS.small : DOTS.default;
+      const dots = rad < 9 ? DOTS.small : rad > 40 ? DOTS.stage : DOTS.default;
       const v = this.level(st);
       const mode = st.mode, A = st.act;
-      // Spin: slow at rest, faster thinking, a quick whirl while 'hype'; dizzy wobbles it.
-      const spinRate = mode === 'think' ? 1.6 : A === 'hype' ? 3 : st.sleepy > 0.5 ? 0.1 : 0.32;
+      // Spin: slow at rest, faster thinking / whole-screen stage, a quick whirl while 'hype'; dizzy wobbles it.
+      const staged = !!window.Roamie?.wholeScreen;
+      const spinRate = mode === 'think' ? 1.6 : A === 'hype' ? 3 : st.sleepy > 0.5 ? 0.1 : staged ? 0.85 : 0.32;
       st.spin = (st.spin ?? 0) + spinRate * (st.dt ?? 0.016);
       const yaw = st.spin + st.look[0] * 0.5, pitch = -0.42 + st.look[1] * 0.25 + (st.dizzy > 0.5 ? Math.sin(t * 9) * 0.3 : 0);
       const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -53,7 +55,7 @@
       const sx = 1 + st.sq * 0.05, sy = 1 - st.sq * 0.04;
       const shake = A === 'upset' && st.actA % 0.9 < 0.32 ? Math.sin(t * 48) * 0.6 : 0;
       const breath = 1 + (st.sleepy > 0.5 ? 0.03 : 0.015) * Math.sin(t * 1.4);
-      const wavy = mode === 'talk' || mode === 'listen' ? v : A === 'hype' ? 0.7 : 0.12;
+      const wavy = mode === 'talk' || mode === 'listen' ? v : A === 'hype' ? 0.7 : staged ? 0.35 + v * 0.4 : 0.12;
       for (const p of dots) {
         // Ripples run over the surface: the voice raises them, a sound wave bulging the points outward.
         const band = Math.sin(p[1] * 7 - t * (mode === 'talk' ? 9 : 3)) * 0.5 + Math.sin(Math.atan2(p[2], p[0]) * 5 + t * 4) * 0.5;

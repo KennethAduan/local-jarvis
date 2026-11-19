@@ -1,9 +1,40 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { checkDraw, DrawArgs } from '../draw.mjs';
 import { FORK_DEFAULTS, JARVIS_FOLLOW, PREFERRED_MODEL, allowedModel, normalizeForkConfig, localCredentials, forkSecrets, localBrowserIntent, localSketchTools, localSystem, runLocalBrowserIntent, sketchArgs, textLocalModel, withoutImages } from '../kineto.mjs';
-import { preferredLocalModel } from '../kineto.mjs';
+import { localAppIntent, planWalkthrough, preferredLocalModel, settingsWalkthrough, wantsWalkthrough } from '../kineto.mjs';
 import { usableByRoamies } from '../providers.mjs';
 import { LMSTUDIO, connectLocal, contextNote } from '../local.mjs';
+
+const walkthroughRequest = 'Hey Jarvis, highlight System and wait for my click. Then highlight Display and wait again.';
+assert.equal(wantsWalkthrough(walkthroughRequest), true);
+assert.equal(wantsWalkthrough('Show me how to export this video. Point to each button and wait for my click.'), true);
+assert.equal(wantsWalkthrough('Show me how photosynthesis works'), false);
+assert.equal(wantsWalkthrough('Open the browser and search for Display settings'), false);
+const settingsWindow = { app: 'Settings', title: 'Home', labels: ['System', 'Bluetooth & devices'] };
+const settingsGuide = settingsWalkthrough('Walkthrough me how to open Display setting in the Windows Settings.', 'win32');
+assert.equal(settingsGuide.open, 'ms-settings:');
+assert.equal(settingsGuide.app, 'Settings');
+assert.equal(settingsWalkthrough('Open Display settings in Windows Settings.', 'win32'), null);
+assert.equal(settingsWalkthrough('Walk me through opening Display settings in Windows Settings.', 'darwin'), null);
+assert.equal(settingsWalkthrough('Show me how to find Displays in System Settings.', 'darwin').open, 'System Settings');
+assert.deepEqual(localAppIntent('Open Display settings.', 'win32'), { target: 'ms-settings:display', label: 'Display settings' });
+assert.deepEqual(localAppIntent('Jarvis, open Notepad.', 'win32'), { target: 'Notepad', label: 'Notepad' });
+assert.deepEqual(localAppIntent('Open Notes.', 'darwin'), { target: 'Notes', label: 'Notes' });
+assert.equal(localAppIntent('Open Chrome and search for display settings.', 'win32'), null);
+const walkthrough = await planWalkthrough(walkthroughRequest, settingsWindow, async () => {
+  assert.fail('Explicit labels should not be rewritten by the model');
+});
+assert.deepEqual(await planWalkthrough(settingsGuide.request, settingsWindow, async () => assert.fail('Known Windows Display route should not need a model')), walkthrough);
+assert.deepEqual(checkDraw(DrawArgs.parse(walkthrough)), []);
+assert.deepEqual(walkthrough.beats.map(({ wait, marks }) => [wait, marks[0].kind, marks[0].at.text]), [['click', 'target', 'System'], ['click', 'target', 'Display']]);
+const goal = 'Show me how to get to Display settings on my screen';
+assert.deepEqual(await planWalkthrough(goal, settingsWindow, async (messages) => {
+  assert.deepEqual(JSON.parse(messages.at(-1).content), { request: goal, window: settingsWindow });
+  return '```json\n{"steps":["System","Display"]}\n```';
+}), walkthrough);
+assert.deepEqual(await planWalkthrough(goal, settingsWindow, async () => '{"steps":[]}'), { beats: [] });
+await assert.rejects(planWalkthrough(goal, settingsWindow, async () => '{"steps":["System"],"action":"click"}'));
 
 const secretCalls = [];
 const isolatedSecrets = forkSecrets({ kind: 'test', get: name => secretCalls.push(['get', name]), set: (name, value) => secretCalls.push(['set', name, value]), delete: name => secretCalls.push(['delete', name]) });
@@ -64,6 +95,17 @@ assert.deepEqual(localBrowserIntent('open shopee'), { kind: 'open', target: 'htt
 const other = 'local/lmstudio/qwen/qwen3-9b';
 assert.equal(normalizeForkConfig({ provider: 'local', model: other }).model, other);
 assert.equal(localCredentials('local', other).baseUrl, 'http://127.0.0.1:1234/v1');
+const overrideScript = `
+  import assert from 'node:assert/strict';
+  import { localCredentials } from ${JSON.stringify(new URL('../kineto.mjs', import.meta.url).href)};
+  import { LMSTUDIO } from ${JSON.stringify(new URL('../local.mjs', import.meta.url).href)};
+  assert.equal(LMSTUDIO.baseUrl, 'http://192.0.2.10:2345/v1');
+  assert.deepEqual(localCredentials('local', ${JSON.stringify(other)}), { baseUrl: LMSTUDIO.baseUrl, accessToken: 'fixture-token' });
+  assert.equal(process.env.JARVIS_LMSTUDIO_API_TOKEN, undefined);
+`;
+execFileSync(process.execPath, ['--input-type=module', '-e', overrideScript], {
+  env: { ...process.env, JARVIS_LMSTUDIO_URL: 'http://192.0.2.10:2345/', JARVIS_LMSTUDIO_API_TOKEN: 'fixture-token' },
+});
 for (const [provider, id] of [['openai', other], ['local', 'local/ollama/qwen'], ['local', 'local/lmstudio/https://evil'], ['local', 'local/lmstudio/../evil'], ['local', 'qwen']]) {
   assert.equal(allowedModel(provider, id), false);
   assert.throws(() => localCredentials(provider, id));

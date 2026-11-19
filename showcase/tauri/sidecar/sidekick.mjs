@@ -6,6 +6,7 @@
 // in:  {type:'menu', id} {type:'answer', id, text} {type:'ui_ready'}
 // out: {type:'menu', items} {type:'ui', msg} {type:'overlays', ids}
 import { Agent } from '@kenkaiiii/gg-agent';
+import { stream } from '@kenkaiiii/gg-ai';
 import { ClaudeCodeAgent, closeSpare } from './claudecode.mjs';
 import { SAFE, checkDrawAction, checkLink, checkOpen, checkRead, checkWrite, redactArgs } from './safety.mjs';
 import { agentsRoot, createAgents, holdAfterLaunch, newsDesk, wantsAgent } from './agents.mjs';
@@ -42,7 +43,7 @@ import { faviconFor } from './draw.mjs';
 import { QUESTIONS, openNote, answerTurn, wantsSkip, endsChat, splitTurn, plain, stripNote, tourBeats, goalFrom, showcaseBeats } from './intro.mjs';
 import { SpeechText, CueFilter, VOICE_CUES, LISTEN_SECS, listenWait, listensAfter } from './speech.mjs';
 import { createSpeaker, voiceProblemText, voiceWhy } from './speaker.mjs';
-import { KokoroVoice, kokoroStatus, installPack } from './kokoro.mjs';
+import { DEFAULT_KOKORO_VOICE, KokoroVoice, kokoroStatus, kokoroVoice, installPack } from './kokoro.mjs';
 import { LITE_BUDGET, LITE_TOOLS, LITE_TURNS, liteSystem } from './lite.mjs';
 import { pickNotch } from './notch.mjs';
 import { DEFAULT_VOICE, FISH_CHOICES } from './fish.mjs';
@@ -52,13 +53,14 @@ import { showTrayIcon } from './wintray.mjs';
 import { createActivity } from './activity.mjs';
 import { canCircle, canSnap, cleanMics, talkChords, hasHands, hasHotkeys, hasVoice, linuxSession, micTrouble, needsVoiceModel, platformLine, samePair, seesPointer, writeChord, writeChords } from './platform.mjs';
 import { accountKeys, keyCards, keyKinds, usableByRoamies, signInCards } from './providers.mjs';
-import { AUTO_UPDATES, DATA_ROOT, FORK_DEFAULTS, PREFERRED_MODEL, allowedModel, normalizeForkConfig, localCredentials, forkSecrets, localBrowserIntent, localSketchTools, localSystem, runLocalBrowserIntent, textLocalModel, withoutImages } from './kineto.mjs';
+import { AUTO_UPDATES, DATA_ROOT, FORK_DEFAULTS, PREFERRED_MODEL, allowedModel, normalizeForkConfig, localCredentials, forkSecrets, localAppIntent, localBrowserIntent, localSketchTools, localSystem, planWalkthrough, runLocalBrowserIntent, settingsWalkthrough, textLocalModel, wantsWalkthrough, withoutImages } from './kineto.mjs';
 import { OLLAMA, LMSTUDIO, connectLocal, contextNote, downNote, forgetLocal, isSmallModel, newServer, noModelsNote, serverFor, serverList, syncLocal as syncServers, withWindow } from './local.mjs';
 import { activityLogs, buildReport, redact, reportDir, reportName, reveal, run, scrubConfig, tail } from './diagnostics.mjs';
 import { detailsText, explain } from './errors.mjs';
 import { aboutRoamies } from './about.mjs';
+import { clearWholeScreenOnHide, normalizeWholeScreen } from './wholescreen.mjs';
 import { createBrowserTools } from './browser.mjs';
-import { MODEL_PREFERENCE_REVISION, preferredLocalModel } from './kineto.mjs';
+import { LMSTUDIO_API_TOKEN, MODEL_PREFERENCE_REVISION, preferredLocalModel } from './kineto.mjs';
 import { whatsNewOnStart } from './whatsnew.mjs';
 import { z } from 'zod';
 
@@ -114,7 +116,7 @@ const DEFAULT_KEYS = process.platform === 'win32'
 const DEFAULTS = {
   provider: null, model: null, sound: true, allowActions: false, skipAllow: false, voice: false,
   notch: 'off', // where I appear on a Mac with a notch: 'off' (beside the cursor, default), 'drop' (the capsule) or 'spread' (see notchMode)
-  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', introDone: false,
+  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', wholeScreen: false, introDone: false,
   replies: 'text', // 'voice': spoken and shown; 'voiceonly': spoken with no bubbles
   tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (the VoiceStudio app on this computer)
   studioVoices: {}, // look → its VoiceStudio voice (a saved profile id; none: the selected engine's default voice)
@@ -141,7 +143,7 @@ const LOOKS = [['jarvis', 'JARVIS', 'e13fa398a7f445a685316a3de6089ce7']];
 const lookVoice = () => (LOOKS.find(([id]) => id === config.look) ?? LOOKS[0])[2];
 // The look's voice with Gemini and with VoiceStudio: the user's pick for it, else its own default.
 const geminiVoice = () => config.geminiVoices?.[config.look] ?? GEMINI_LOOK_VOICES[config.look] ?? GEMINI_DEFAULT_VOICE;
-const studioVoice = () => config.studioVoices?.[config.look] ?? null;
+const studioVoice = () => kokoroVoice(config.studioVoices?.[config.look])?.id ?? DEFAULT_KOKORO_VOICE;
 // Its name is its look's: Roamie, JARVIS, Anime Girl, Sarah, Adrian or Rita X. Roamies is the app.
 const lookName = () => (LOOKS.find(([id]) => id === config.look) ?? LOOKS[0])[1];
 // What each says when it's picked, in its own voice (Settings and the setup guide show the same words).
@@ -169,6 +171,7 @@ let shellInfo = null; // resolves the shell's reply to it: screens, tray, panel,
     if (config[one]) config[each] = { [config.look ?? 'classic']: config[one], ...config[each] };
     delete config[one];
   }
+  config.wholeScreen = normalizeWholeScreen(config.wholeScreen);
 }
 const saveConfig = () => writeJson(CONFIG_PATH, config, { backup: true });
 if (migratedSpeech) saveConfig(); // persist the one-time migration
@@ -378,10 +381,10 @@ async function refreshAuthNow() {
 // it's loaded (until then gg-core may guess 4k). local.status: each connected server's last answer, by id.
 const servers = () => [LMSTUDIO];
 const local = { windows: new Map(), status: new Map(), warned: new Set() };
-// A saved endpoint or key must never redirect local inference.
+// The default and any override come from the launch environment. Saved endpoints and keys are ignored.
 const localAuth = { getCredentials: async () => null };
 async function syncLocal() {
-  const result = await connectLocal(localAuth, LMSTUDIO, { windows: local.windows }).catch(() => ({ ok: false, models: [], all: 0 }));
+  const result = await connectLocal(localAuth, LMSTUDIO, { apiKey: LMSTUDIO_API_TOKEN, windows: local.windows }).catch(() => ({ ok: false, models: [], all: 0 }));
   local.status = new Map([[LMSTUDIO.id, result]]);
   await refreshAuth();
   return local.status;
@@ -413,7 +416,7 @@ async function connectServer(id) {
   if (id !== LMSTUDIO.id) return;
   await syncLocal(); ensureModel(); menu();
   const r = local.status.get(id);
-  panelNote(r.ok ? connectedNote(LMSTUDIO, r) : 'Start LM Studio and its server at http://127.0.0.1:1234/v1, then try again.', !r.ok);
+  panelNote(r.ok ? connectedNote(LMSTUDIO, r) : `Start LM Studio and its server at ${LMSTUDIO.baseUrl}, then try again.`, !r.ok);
 }
 // The Add a server form: saved only once the server answers, with its key (if any) in auth.json.
 async function addServer({ label, baseUrl, key, images }) {
@@ -480,7 +483,7 @@ const userName = (() => {
 // ---------- tools ----------
 // The open request's voice, if replies are spoken: draw's beat lines are said on it, in order with the reply.
 let turnVoice = null;
-const { tools, hands, whereNow, frontNow: frontData, frontBounds, ink, nextTurn } = createTools({
+const { tools, hands, readWindow, whereNow, frontNow: frontData, frontBounds, ink, nextTurn } = createTools({
   focus: HANDS_OK ? { start: (m, t) => startFocus(m, t), stop: () => stopFocus() } : null,
   firedReminders: () => firedReminders,
   allowActions: () => config.allowActions, skipAllow: () => !!config.allowActions && !!config.skipAllow, ui, ask, openUrl, userName,
@@ -625,9 +628,9 @@ const replyStyle = () => {
 const TEXT_STYLE = `You talk through small speech bubbles, so keep replies short: one to three sentences unless asked for detail. Light markdown shows properly (**bold** for the key word, \`code\` for commands and file names, [links](https://…)), but skip headings and tables in a bubble, and never narrate actions like *waves*. One exception: when the answer is genuinely a list, steps or a breakdown, it shows on a card beside you instead of a bubble. Then start with a one-sentence answer, follow with 3 to 6 short points as "- " lines (one fact each, under 20 words), and if you used the web this turn, end with a line "Sources: " and the site names as [name](url) links. A quick fact from the web (a score, a date, the weather, who someone is) stays a short bubble, with no points and no sources. Markdown renders on the card (bold, \`code\`, links, headings, tables, code blocks), so use what helps, but no preamble. Everything else stays a short bubble with no "- " lines. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines. An emoji now and then is fine; the bubbles show them. `;
 const VOICE_STYLE = `You talk out loud: what you write is spoken in your voice and shown in a small bubble, so write for the ear. Say one to three short sentences, the way you'd talk to a friend: plain words, contractions, about 6 to 20 words each. What you say has no markdown, emoji, links, file paths or code; name the site, file or app instead. Say numbers, times and money the way people say them. Anything to read rather than hear goes below what you say and is never read out: "- " lines for points, options or steps (3 to 6, one fact each, under 20 words), "> " lines for a draft they'll send or copy (an email, message or post), and a \`\`\` block for code. What they asked to hear (a story, a joke, advice) is spoken, not put on screen: say it, short (a story in 4 to 6 sentences). An explanation is spoken too, in a few sentences, with a drawing beside it when a picture carries it (see "Show, don't just tell"). An answer from the web is said like any other: a quick fact (a score, a date, the weather, who someone is) is just your sentences, no points and no sources. Only when the answer is genuinely a list, steps or a breakdown that's easier to read than hear, say it in one or two sentences, then the "- " points, then, if you used the web, a line "Sources: " with the site names as [name](url) links: those show on a card beside you and only your sentences are spoken. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines. Never say "here's a list" or read out what's on screen; a few words pointing to it are enough ("the steps are on screen").
 Your voice carries feeling: start a sentence with a voice cue in square brackets when the moment calls for it, and it's performed, never shown or read out. Moods: ${VOICE_CUES.emotions.filter((e) => !EMOTES.includes(e)).join(', ')}; soften or strengthen one with slightly, very or extremely ("[slightly sad]"), or pair two ("[warm and curious]"). How it's said, placed right before the words: ${VOICE_CUES.tones.join(', ')} ("It's [emphasis] today."). Sounds, followed by the sound in words: ${VOICE_CUES.sounds.join(', ')} ("[chuckling] Heh, fair enough.", "[sighing] Long day."). Pauses and background: ${VOICE_CUES.effects.join(', ')}. You can also describe the delivery in a few plain words when no single cue fits ("[quietly, a little embarrassed]", "[bright and bouncy]"). Act it: your voice really performs these, so let the feeling show. Match what's really happening: laugh at something funny, go gentle with bad news, whisper a secret, hurry when they're in a rush, light up at good news. Most replies want a voice cue somewhere, often on the first sentence, but at most one mood and one sound per sentence, never stack three, never use one just to fill, and keep shouting, screaming, sobbing and the background effects for when they truly fit.
-Before anything slow (searching the web, fetching or reading a page or file, looking at the screen, acting in an app, running a command), first say one short beat of 2 to 6 words that shows you heard them ("On it, checking Paris."), then call the tool in the same reply, so they're never left in silence. No beat when you answer straight away, and never describe your steps. In longer work, one short line before each new stage, not before every call.
+Before a slow tool call, give a brief acknowledgment tied to the current request, then call the tool in the same reply. Mention a place, app or task only if it is relevant to what the user asked. Skip the acknowledgment for an immediate answer. In longer work, acknowledge each new stage once.
 `;
-const stablePrompt = () => `You are JARVIS, a glowing sphere who lives on ${userName}'s screen as a desktop companion. This is Jarvis ${VERSION}. Inference runs in LM Studio on this computer and spoken replies use a local voice. Prefer 2D sketches for explanations. Never call yourself Sidekick.
+const stablePrompt = () => `You are JARVIS, a glowing sphere who lives on ${userName}'s screen as a desktop companion. This is Jarvis ${VERSION}. Inference runs on the configured LM Studio server and spoken replies use a local voice. Prefer 2D sketches for explanations. Never call yourself Sidekick.
 Questions about Jarvis itself (where to find it, its menus, panel pages and settings, updates, something not working, who made it): call about_roamies and answer from what it says. Don't invent features or settings it doesn't list.
 ${replyStyle()}Your body does the acting: to act out a feeling, start your reply with one body tag, which is never shown: ${EMOTES.map((e) => `[${e}]`).join(' ')} (only these five). hype celebrates a win, upset is for when they're dodging work, remind nudges about something they said they'd do, motivate is a push to start, wave is hello or goodbye. Most replies need no body tag.
 Lead with the answer: the fact, number, pick or result they asked for, then only the context that makes it useful, then stop. A count or total gathered over several pages, files or results: note each one's count in a few words as you go ("Page 1: two."), add those up, and check the total you lead with against the items you then name. No opener about checking, looking or searching ("Let me see…", "I found…")${VOICE_ON() ? ', apart from the one short beat before something slow' : ''}.
@@ -1061,7 +1064,7 @@ async function readyAgent() {
   await resumed;
   await voiceKeysLoaded;
   await refreshAuth({ cached: true });
-  if (!ensureModel()) { await syncLocal(); if (!ensureModel()) { openPanel('model'); return 'Start LM Studio, load a tool-capable model, and start its server at http://127.0.0.1:1234/v1. Then refresh the Model page.'; } }
+  if (!ensureModel()) { await syncLocal(); if (!ensureModel()) { openPanel('model'); return `Start LM Studio, load a tool-capable model, and start its server at ${LMSTUDIO.baseUrl}. Then refresh the Model page.`; } }
   if (config.provider === 'local') {
     if (!getModel(config.model)) await syncLocal();
     const s = serverFor(servers(), config.model), r = s && local.status.get(s.id);
@@ -1128,18 +1131,25 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   desk.started(news);
   if (notReady) return say(notReady, 'concerned');
   if (image && textSketchMode()) return say('This model can talk and sketch, but cannot inspect images. Pick a vision model on the Model page to ask about a screen capture.', 'concerned');
+  const localRequest = config.provider === 'local' && !image && !intro && !news;
+  const settings = localRequest && HANDS_OK ? settingsWalkthrough(text) : null;
+  const walkthrough = localRequest && HANDS_OK && (settings || wantsWalkthrough(text));
+  const appOpen = localRequest && !walkthrough ? localAppIntent(text) : null;
   // Local models (incl. VL with lite off) often explain instead of calling open: handle clear open/search intents here.
-  if (config.provider === 'local' && !image && !intro && !news && localBrowserIntent(text)) {
+  if (localRequest && !walkthrough && (appOpen || localBrowserIntent(text))) {
     busy = true; quiet = false; autoTurn = null; menu(); holdWake(true);
     if (!text.startsWith('(')) activity.asked(text);
     try {
-      // Prefer the compact open wrapper when present; otherwise the real open tool (VL / full tool set).
-      const openTool = (compactMode() ? localSketchTools(tools) : tools).find((t) => t.name === 'open');
-      const msg = await runLocalBrowserIntent(text, (args) => openTool.execute(args, {}));
+      const openTool = (!appOpen && compactMode() ? localSketchTools(tools) : tools).find((t) => t.name === 'open');
+      let msg;
+      if (appOpen) {
+        await openTool.execute({ target: appOpen.target });
+        msg = `Opened ${appOpen.label}.`;
+      } else msg = await runLocalBrowserIntent(text, (args) => openTool.execute(args, {}));
       speakLine(msg || 'Opened your browser.');
-      logLine('local_browser_intent', { text: String(text).slice(0, 120), model: config.model });
+      logLine(appOpen ? 'local_app_intent' : 'local_browser_intent', { text: String(text).slice(0, 120), model: config.model });
     } catch (err) {
-      console.error('local browser intent', err);
+      console.error('local open intent', err);
       speakLine(aloud(problem('reply', err, { who: 'Jarvis' })), 'concerned');
     } finally {
       busy = false; holdWake(false); menu(); stir();
@@ -1166,10 +1176,10 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   const spoken = voice && new SpeechText((t) => voice.say(t));
   let stalled = false, watch = null;
   try {
-    // Voice: a short first line before a tool ("On it, checking Paris.") is a beat: it's spoken, but not
+    // Voice: a short first line before a tool is a beat: it's spoken, but not
     // shown, so the card or bubble starts with the answer. It shows after all if no tool follows.
     // The hold is for the pre-tool beat only: a short line before a tool call is dropped once the tool starts. It isn't
-    // released at a sentence end, since "On it, checking Paris." is a whole sentence; past 40 characters it's an answer.
+    // released at a sentence end, since a beat can be a whole sentence. Past 40 characters it's treated as an answer.
     let beatText = voice ? '' : null, trimNext = false;
     const showText = (text) => {
       if (!SHOW_TEXT()) return;
@@ -1224,8 +1234,39 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
       if (h) { reply.push(h); lastReply = h; fresh = false; }
     };
     const ctl = controller;
-    watch = stallWatch(STALL_MS, () => { stalled = true; logLine('stalled', { turn, ms: Date.now() - use.t }); ctl.abort(); });
-    for await (const e of agentEvents(agent.prompt(content))) {
+    if (walkthrough) {
+      const toolCallId = `walkthrough-${turn}`;
+      voice?.beat();
+      if (settings) {
+        ctl.signal.throwIfAborted();
+        await tools.find((tool) => tool.name === 'open').execute({ target: settings.open });
+      }
+      const target = settings?.app ?? 'front';
+      const window = await readWindow(target, { labelsOnly: true, waitForOpen: settings ? ctl.signal : undefined });
+      const args = await planWalkthrough(settings?.request ?? text, window, async (messages) => {
+        const { baseUrl, accessToken } = await credsFor();
+        const signal = AbortSignal.any([ctl.signal, AbortSignal.timeout(STALL_MS)]);
+        const { message, usage } = await stream({ provider: 'local', model: config.model, baseUrl, apiKey: accessToken, messages, signal, maxTokens: 384, temperature: 0 }).response;
+        use.calls++;
+        use.in += usage.inputTokens;
+        use.out += usage.outputTokens;
+        return message.content.filter((part) => part.type === 'text').map((part) => part.text).join('');
+      });
+      ctl.signal.throwIfAborted();
+      if (args.beats.length) {
+        use.tools++;
+        logLine('tool', { turn, id: toolCallId, name: 'draw', source: 'local_walkthrough' });
+        const { label } = args.beats[0].marks[0];
+        const result = await tools.find((tool) => tool.name === 'draw').execute({ ...args, target }, { toolCallId, signal: ctl.signal }).catch((error) => {
+          if (!/^beat 1 mark 1 \(target\): No button, label or heading reads /i.test(error?.message)) throw error;
+          lastReply = `I couldn’t find ${label} in ${window.app}. Open the right window and ask again.`;
+          return '';
+        });
+        if (/\bStopped before beat \d+:/.test(result)) lastReply = 'I couldn’t find the next control on screen.';
+      } else lastReply = 'I couldn’t identify the controls for this walkthrough.';
+      if (lastReply) reply.push(lastReply);
+    } else watch = stallWatch(STALL_MS, () => { stalled = true; logLine('stalled', { turn, ms: Date.now() - use.t }); ctl.abort(); });
+    for await (const e of walkthrough ? [] : agentEvents(agent.prompt(content))) {
       watch.event(e);
       if (e.type === 'text_delta') {
         const t = echo.push(e.text);
@@ -1523,16 +1564,13 @@ async function studioReady() {
   say(s.message, 'concerned'); panelNote(s.message, true);
   return false;
 }
-// 'default': the engine's own voice. Otherwise a saved VoiceStudio voice id; once the list is known, only those.
+// Only voices in the local Kokoro pack can be selected.
 function setStudioVoice(id) {
-  const known = speech.local?.voices;
-  if (id === 'default') id = null;
-  else if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(id) || id.includes('..') || (known?.length && !known.some((v) => v.id === id))) return;
-  if (id === studioVoice()) return;
+  if (id === 'default') id = DEFAULT_KOKORO_VOICE;
+  if (!kokoroVoice(id) || id === studioVoice()) return;
   config.studioVoices = { ...config.studioVoices, [config.look]: id }; saveConfig(); // this look's
   speech.setLocalVoice(id);
   menu(); if (onboarding) obState();
-  if (tts().local && VOICE_ON()) speakLine('This is my new voice.');
 }
 // VoiceStudio for the Voice page and the guide: checked yet, ready or why not, its engine, and the voices saved there.
 let kokoroInstalling = false, kokoroError = null;
@@ -1940,7 +1978,7 @@ function panelState() {
     // The Model page's local rows: each server, connected or not, and why its models aren't in the menu.
     localServers: servers().map((x) => {
       const on = storedKeys.has(`local:${x.id}`), r = local.status.get(x.id);
-      return { id: x.id, label: x.label, custom: !!x.custom, baseUrl: x.custom ? x.baseUrl : null, images: !!x.supportsImages, on,
+      return { id: x.id, label: x.label, custom: !!x.custom, baseUrl: x.baseUrl, images: !!x.supportsImages, on,
         note: !r ? '' : !r.ok ? `${downNote(x, r.reason)} Start LM Studio and its server, then refresh.` : r.models.length ? '' : noModelsNote(x, r.all, true) };
     }),
     loggingIn,
@@ -1949,7 +1987,7 @@ function panelState() {
     facts: listFacts().slice().reverse().map((f) => ({ id: f.id, text: f.text })),
     commitments: openCommitments().map((c) => ({ id: c.id, text: c.text, due: c.due ?? null, when: c.due ? `${fmtWhen(c.due)}${c.repeat ? ` · repeats ${repeatLabel(c.repeat)}` : ''}` : '', overdue: !!(c.due && c.due < Date.now()), repeat: c.repeat ?? null })),
     look: config.look ?? 'classic', looks: LOOKS.map(([id, label]) => [id, label]), name: lookName(),
-    size: sizeNow(), sizes: SIZES,
+    size: sizeNow(), sizes: SIZES, wholeScreen: normalizeWholeScreen(config.wholeScreen),
     replies: config.replies === 'voiceonly' ? 'voiceonly' : VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
     fishModel: config.fishModel, fishModels: FISH_CHOICES, fishFree: tts().id === 'fish' && speech.on && speech.model.endsWith('-free'),
     geminiVoice: geminiVoice(), geminiVoices: GEMINI_VOICES, geminiShared: ttsKeys.gemini === 'shared',
@@ -2205,6 +2243,12 @@ async function onMenu(id, via) {
   else if (id === 'syncstop') { config.syncDir = ''; syncKey = null; syncAllowOnce = false; if (config.syncKeySaved) { await secrets.delete(SYNC_KEY).catch(() => {}); config.syncKeySaved = false; } saveConfig(); syncInfo = { at: null, error: null }; menu(); say('Stopped syncing. Everything stays on this computer, and the folder copy is left as it was.', 'happy'); }
   else if (id === 'gamemode' && HANDS_OK) { config.gameSidebar = config.gameSidebar === false; saveConfig(); menu(); gameModeTick().catch(() => {}); }
   else if (id === 'sound') { config.sound = !config.sound; saveConfig(); ui({ kind: 'sound', on: config.sound }); voiceConfig(); menu(); }
+  else if (id === 'wholescreen') {
+    config.wholeScreen = !normalizeWholeScreen(config.wholeScreen);
+    saveConfig();
+    ui({ kind: 'wholescreen', on: config.wholeScreen });
+    menu();
+  }
   else if (id === 'lite') {
     config.lite = !config.lite; saveConfig(); agentStale = true; menu();
     say(config.lite ? 'Lite mode on. I\'ll stick to talking, your list, opening things and web search.' : 'Lite mode off. Everything\'s back on.', 'happy');
@@ -2482,8 +2526,11 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     notchUi();
     ui({ kind: 'size', size: sizeNow() });
     ui({ kind: 'look', look: config.look ?? 'classic' });
+    ui({ kind: 'wholescreen', on: normalizeWholeScreen(config.wholeScreen) });
     ui({ kind: 'greet' });
     agents.sync();
+  } else if (m.type === 'wholescreen_off') {
+    if (clearWholeScreenOnHide(config)) { saveConfig(); ui({ kind: 'wholescreen', on: false }); menu(); }
   } else if (m.type?.startsWith('ob_') || m.type?.startsWith('chat_') || m.type === 'set_keys' || m.type === 'set_actions' || m.type === 'set_login' || m.type === 'keybind_error') onGuide(m).catch((e) => console.error('guide', e));
   else if (m.type?.startsWith('voice')) onVoice(m);
   else if (m.type === 'snap') areaSnap();

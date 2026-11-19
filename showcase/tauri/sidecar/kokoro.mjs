@@ -6,6 +6,19 @@ import { KOKORO_ASSETS, verifyPack } from './kokoro-pack.mjs';
 import { DATA_ROOT } from './kineto.mjs';
 
 const BASE = 'https://huggingface.co/csukuangfj/kokoro-int8-multi-lang-v1_0/resolve/57adb37fc0e8d4bd430cfc1b8f8c2294945b9af2/';
+// Speaker IDs in the pinned v1.0 pack. The helper uses a British English lexicon.
+export const DEFAULT_KOKORO_VOICE = '26';
+export const KOKORO_VOICES = [
+  { id: DEFAULT_KOKORO_VOICE, name: 'George' },
+  { id: '20', name: 'Alice' },
+  { id: '21', name: 'Emma' },
+  { id: '22', name: 'Isabella' },
+  { id: '23', name: 'Lily' },
+  { id: '24', name: 'Daniel' },
+  { id: '25', name: 'Fable' },
+  { id: '27', name: 'Lewis' },
+];
+export const kokoroVoice = (id) => KOKORO_VOICES.find((voice) => voice.id === id);
 export const modelDir = () => path.join(DATA_ROOT, 'voice', 'kokoro-int8-v1');
 export const cachedDir = () => process.env.APPDATA ? path.join(process.env.APPDATA, 'com.kineto.jarvis', 'voice', 'kokoro-int8-v1') : null;
 let installing = null;
@@ -61,7 +74,7 @@ export async function kokoroStatus({ dir = modelDir(), executable = process.env.
   if (platform !== 'win32') return { ok: false, reason: 'unavailable', message: 'Local spoken replies are available on Windows in this build.' };
   try { if (!executable || !(await fs.stat(executable)).isFile()) throw new Error(); }
   catch { return { ok: false, reason: 'unavailable', message: 'Local voice is unavailable. Reinstall Jarvis.' }; }
-  try { if (await reuse({ dir })) return { ok: true, engine: 'George' }; }
+  try { if (await reuse({ dir })) return { ok: true, engine: 'Kokoro', voices: KOKORO_VOICES }; }
   catch { return { ok: false, reason: 'error', message: 'Could not prepare the local voice. Check disk space and try again.' }; }
   return { ok: false, reason: 'missing', message: 'Install the voice (149 MB) to hear spoken replies.' };
 }
@@ -80,8 +93,9 @@ export function splitSpeech(value) {
 }
 const MAX_RESPONSE = Math.ceil(24000 * 60 * 2 / 3) * 4 + 1024;
 export class KokoroVoice {
-  constructor({ onAudio, onEnd, onError, executable = process.env.JARVIS_KOKORO, dir = modelDir(), spawnImpl = spawn, timeout = 90_000 }) {
+  constructor({ onAudio, onEnd, onError, voice, executable = process.env.JARVIS_KOKORO, dir = modelDir(), spawnImpl = spawn, timeout = 90_000 }) {
     Object.assign(this, { onAudio, onEnd, onError, executable, dir, spawnImpl, timeout });
+    this.voice = kokoroVoice(voice)?.id ?? DEFAULT_KOKORO_VOICE;
     this.queue = []; this.buffer = ''; this.state = 'new'; this.ending = false; this.busy = null; this.seq = 0; this.heard = false;
   }
   open() {
@@ -107,7 +121,9 @@ export class KokoroVoice {
     if (!text) { if (this.ending) this.finish(); return; }
     const id = String(++this.seq); this.busy = id;
     this.timer = setTimeout(() => this.fail('Local voice took too long. Try again.'), this.timeout);
-    try { this.child.stdin.write(JSON.stringify({ id, text, speed: 1.15, volume: 1 }) + '\n'); } catch { this.fail('Local voice stopped unexpectedly.'); }
+    const request = { id, text, speed: 1.15, volume: 1 };
+    if (this.voice !== DEFAULT_KOKORO_VOICE) request.sid = Number(this.voice);
+    try { this.child.stdin.write(JSON.stringify(request) + '\n'); } catch { this.fail('Local voice stopped unexpectedly.'); }
   }
   receive(data) {
     if (this.state === 'done') return;

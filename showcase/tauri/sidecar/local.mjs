@@ -5,10 +5,11 @@ import {
   DEFAULT_LOCAL_ENDPOINTS, LOCAL_API_KEY_PLACEHOLDER, clearRuntimeModels, localAuthStorageKey, parseLocalModelId, probeEndpoint,
   registerRuntimeModels, toModelInfo,
 } from '@kenkaiiii/gg-core';
+import { LMSTUDIO_URL } from './kineto.mjs';
 
 export const OLLAMA = DEFAULT_LOCAL_ENDPOINTS.find((e) => e.id === 'ollama');
 export const OLLAMA_KEY = localAuthStorageKey(OLLAMA.id);
-export const LMSTUDIO = { id: 'lmstudio', label: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', kind: 'lmstudio' };
+export const LMSTUDIO = { id: 'lmstudio', label: 'LM Studio', baseUrl: LMSTUDIO_URL, kind: 'lmstudio' };
 export const BUILT_IN = [OLLAMA, LMSTUDIO];
 export const MAX_SERVERS = 8;
 // Requests are fitted to half the window, and the system prompt and tools alone are about 12.6k tokens.

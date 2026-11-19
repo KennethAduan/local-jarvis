@@ -503,6 +503,17 @@
     if (m.kind === 'notch') { if (Roamie.notch) { Roamie.notch.enabled = !!m.on; if (m.style) Roamie.notch.style = m.style; if (!m.on) Roamie.notch.close(); } return; }
     if (m.kind === 'sound') { if (Roamie.sfx) Roamie.sfx.enabled = m.on; return; }
     if (m.kind === 'size') { for (const t of Roamie.tiles ?? []) t.creature.setForm?.(m.size); return; }
+    if (m.kind === 'wholescreen') {
+      const on = !!m.on;
+      Roamie.stage?.set(on);
+      for (const t of Roamie.tiles ?? []) t.creature?.setStage?.(on);
+      getAgent()?.setWholeScreen?.(on);
+      // Opaque window backdrop — required on Windows or desktop wallpaper shows through.
+      invoke('stage_cover', { on }).catch(() => {});
+      document.documentElement.style.background = on ? '#000814' : 'transparent';
+      document.body.style.background = on ? '#000814' : 'transparent';
+      return;
+    }
     if (m.kind === 'look') {
       for (const t of Roamie.tiles ?? []) t.creature.setLook?.(m.look);
       field.setAttribute('aria-label', `Message for ${NAMES[m.look] ?? NAMES.classic}`);
@@ -535,7 +546,10 @@
       // ⌃⌥S toggles; the menu's Show Sidekick only ever shows.
       const a = getAgent();
       if (m.show || !a.visible) { if (a.show({ summoned: true })) a.act('wave'); }
-      else a.hide();
+      else {
+        clearWholeScreen();
+        a.hide();
+      }
       return;
     }
     if (m.kind === 'say') { if (!ask || ask.bar) { if (capR()) N().say(m.text); else getAgent().say(m.text, { mood: m.mood ?? null }); } } // the field leaves the bubble free
@@ -554,7 +568,20 @@
   // way out once the Roamie has gone). Cards left on screen have their own close button and don't hold Esc. The
   // reminders card does while it shows (it goes by itself in a few seconds).
   // A voice turn counts too: on macOS the sidekick steps away while the mic is on and until the answer shows.
-  const up = () => !!(getAgent()?.visible || Roamie.notch?.active || ask || Roamie.panel?.isOpen || Roamie.ink?.playing || Roamie.ink?.loose || Roamie.ink?.reminding || hearing || waveTurn || Roamie.voiceOut?.playing());
+  // Leave whole-screen mode (persist off) without hiding: same clear path as summon hide.
+  const clearWholeScreen = () => {
+    const a = getAgent();
+    if (!(Roamie.wholeScreen || a?.wholeScreen)) return false;
+    Roamie.stage?.set(false);
+    for (const t of Roamie.tiles ?? []) t.creature?.setStage?.(false);
+    a?.setWholeScreen?.(false);
+    invoke('stage_cover', { on: false }).catch(() => {});
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    send({ type: 'wholescreen_off' });
+    return true;
+  };
+  const up = () => !!(getAgent()?.visible || Roamie.wholeScreen || getAgent()?.wholeScreen || Roamie.notch?.active || ask || Roamie.panel?.isOpen || Roamie.ink?.playing || Roamie.ink?.loose || Roamie.ink?.reminding || hearing || waveTurn || Roamie.voiceOut?.playing());
   function onEsc() {
     dropAutoListen();
     const a = getAgent();
@@ -565,6 +592,7 @@
     // A drawing on screen: Esc takes it all away (and the sidecar forgets its parts).
     if (Roamie.ink?.busy) { Roamie.ink.clear({ all: true }); send({ type: 'ink_cleared' }); return; }
     if (Roamie.panel?.isOpen) Roamie.panel.close();
+    if (clearWholeScreen()) return;
     endTalk(); listen?.close(); listen = null;
     Roamie.notch?.close();
     if (a.visible) a.hide();

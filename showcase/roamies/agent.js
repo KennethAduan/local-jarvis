@@ -153,7 +153,7 @@
     const tcan = document.createElement('canvas');
     const tctx = tcan.getContext('2d');
     let b = null, dying = [], now = 0, W = 800, H = 600, mouthT = 0, mouthMode = null, gestT = 0;
-    let tool = null, lastPose = null, lookAt = null, actUntil = 0, typedAt = -9;
+    let tool = null, lastPose = null, lookAt = null, actUntil = 0, typedAt = -9, whole = false;
     // Context handed to tool performances (agent-tools.js): timing, sounds and the face; the task tag shows the rest.
     const C = {
       k, sq: k.sq, face, S: k.S,
@@ -353,6 +353,7 @@
 
     // A new request (talking, typing, summoning): come over to the cursor if it's somewhere else now.
     const comeToCursor = () => {
+      if (whole) return; // whole-screen: stay parked at center so chat opens beside the core
       if (R.sidebar?.on) return; // game mode: it stays in its panel
       const p = presence.ptr;
       if (!p || !visible() || pen.held || m.dragging || m.flung) return;
@@ -534,21 +535,23 @@
       bb.rows = inner.rows; bb.cols = inner.cols;
       // Placement: above the head, else below, else beside; always fully inside the visible screen.
       // The thinking tag sits where the reply will open, so it turns into the reply without moving.
-      const S = bounds(), edge = P * 2 + 4, gap = k.R * 0.5 + P * 2;
+      // Whole-screen: lay out against a modest face radius so huge stage visuals don't shove bubbles off-screen.
+      const faceR = whole ? Math.min(k.R, 96) : k.R;
+      const S = bounds(), edge = P * 2 + 4, gap = faceR * 0.5 + P * 2;
       const w = bb.w.x, h = bb.h.x, L0 = S.l + edge, T0 = S.t + edge, R0 = S.r - edge, B0 = S.b - edge;
       // The text holds still to be read: the body's small drifts while it idles and talks don't move the bubble
       // (each one jumped the text a whole cell). It moves once the body really has, or rides with it while it's
       // carried along with the cursor.
-      if (bb.ax == null || m.drive || Math.hypot(m.x - bb.ax, m.y - bb.ay) > k.R * 0.6) { bb.ax = m.x; bb.ay = m.y; }
+      if (bb.ax == null || m.drive || Math.hypot(m.x - bb.ax, m.y - bb.ay) > faceR * 0.6) { bb.ax = m.x; bb.ay = m.y; }
       const ax = bb.ax, ay = bb.ay;
       const skew = clamp((ax - W / 2) * -0.15, -w * 0.3, w * 0.3);
       const place = {
-        above: { x: ax - w / 2 + skew, y: ay - k.R * 1.1 - gap - h },
-        below: { x: ax - w / 2 + skew, y: ay + k.R * 1.1 + gap },
+        above: { x: ax - w / 2 + skew, y: ay - faceR * 1.1 - gap - h },
+        below: { x: ax - w / 2 + skew, y: ay + faceR * 1.1 + gap },
         // Beside it, the top stays put level with its head and the bubble grows down: centred on it, every new
         // line pushed the whole bubble (and what you're reading) up by half a line.
-        right: { x: ax + k.R * 1.2 + gap, y: ay - k.R * 0.95 },
-        left: { x: ax - k.R * 1.2 - gap - w, y: ay - k.R * 0.95 },
+        right: { x: ax + faceR * 1.2 + gap, y: ay - faceR * 0.95 },
+        left: { x: ax - faceR * 1.2 - gap - w, y: ay - faceR * 0.95 },
       };
       const fits = (sd, slack = 0) => {
         const c = place[sd];
@@ -559,7 +562,10 @@
       // that's the side it keeps (fol.side), not where it is this instant: a fast flick can carry the cursor past
       // it for a moment, which used to swing the bubble across and back.
       const away = station.byCursor ? (m.drive && fol.keep ? (fol.side > 0 ? 'right' : 'left') : m.x >= station.byCursor[0] ? 'right' : 'left') : null;
-      const order = away ? [away, 'above', 'below', away === 'right' ? 'left' : 'right'] : ['above', 'below', roomRight ? 'right' : 'left', roomRight ? 'left' : 'right'];
+      // Whole-screen prefers beside the core so replies sit in the open HUD bands, not on top of the hub.
+      const order = whole
+        ? [roomRight ? 'right' : 'left', roomRight ? 'left' : 'right', 'above', 'below']
+        : away ? [away, 'above', 'below', away === 'right' ? 'left' : 'right'] : ['above', 'below', roomRight ? 'right' : 'left', roomRight ? 'left' : 'right'];
       // Keep the current side while it still fits, so the bubble doesn't flicker between sides; it changes only
       // when it would run off the screen. Pushed off its first choice by an edge, it goes back once there's clear
       // room again (not the moment it just fits, which flickered at the edge).
@@ -582,8 +588,8 @@
       bb.x.x = clamp(bb.x.x, L0, maxX); bb.y.x = clamp(bb.y.x, T0, maxY);
       const beside = bb.side === 'left' || bb.side === 'right';
       const tip = beside
-        ? { x: m.x + (bb.side === 'right' ? 1 : -1) * k.R * 0.92, y: m.y - k.R * 0.25 }
-        : { x: m.x + clamp((bb.x.x + w / 2 - m.x) * 0.25, -k.R * 0.4, k.R * 0.4), y: bb.below ? m.y + k.R * 0.95 : m.y - k.R * 0.98 };
+        ? { x: m.x + (bb.side === 'right' ? 1 : -1) * faceR * 0.92, y: m.y - faceR * 0.25 }
+        : { x: m.x + clamp((bb.x.x + w / 2 - m.x) * 0.25, -faceR * 0.4, faceR * 0.4), y: bb.below ? m.y + faceR * 0.95 : m.y - faceR * 0.98 };
       spring(bb.tail.x, tip.x, 90, 9, dt); spring(bb.tail.y, tip.y, 90, 9, dt);
       bb.trail = clamp(bb.trail + dt * (bb.kind === 'thought' ? 3 : -4), 0, 1);
       // lifetime
@@ -976,6 +982,23 @@
         setStation(x, y); m.x = x; m.y = y; m.vx = m.vy = 0; m.mode = 'rest'; m.rest = 1;
         station.moving = false; station.flee = 0; station.quietUntil = now + 1;
       },
+      setWholeScreen(on) {
+        whole = !!on;
+        k.setStage?.(whole);
+        if (whole) {
+          ensureShown();
+          const S = bounds();
+          // Slightly above center so a huge globe still clears the floor pad / ask bar.
+          const cx = (S.l + S.r) / 2, cy = S.t + (S.b - S.t) * 0.40;
+          setStation(cx, cy);
+          fol.on = false; m.drive = null;
+          m.x = cx; m.y = cy; m.vx = m.vy = 0;
+          m.goTo(cx, cy);
+          station.moving = false; station.flee = 0;
+          presence.summoned = true; presence.lastActive = now;
+        }
+      },
+      get wholeScreen() { return whole; },
       setAuto: (on, idle) => { presence.auto = !!on; if (idle) presence.idle = idle; presence.lastActive = now; },
       // A request is in progress: the Sidekick stays up for the whole turn, between its thoughts, tools and replies.
       working: (on) => { presence.working = !!on; presence.lastActive = now; },
@@ -1180,7 +1203,7 @@
           const hover = env.mouse?.active && Math.hypot(env.mouse.x - m.x, env.mouse.y - m.y) < k.R * 1.5;
           // A turn in progress (#83) and a voice still talking both count: an answer moved onto the card has no bubble
           // left to keep it here, and leaving mid-sentence left nothing on screen to stop it with.
-          const busyNow = b || dying.length || tool || pen.held || now < actUntil || m.dragging || m.flung || hover || k.presence === 'in' || R.panel?.working || presence.working || R.voiceOut?.playing();
+          const busyNow = whole || b || dying.length || tool || pen.held || now < actUntil || m.dragging || m.flung || hover || k.presence === 'in' || R.panel?.working || presence.working || R.voiceOut?.playing();
           if (busyNow) presence.lastActive = now;
           const idleFor = presence.summoned ? presence.summonIdle : presence.idle;
           if (k.presence === 'shown' && now - presence.lastActive > idleFor) { presence.summoned = false; k.vanish(nextVariant()); }
@@ -1195,7 +1218,7 @@
           if (station.x == null) setStation(m.x, m.y);
           const held = m.dragging || m.flung;
           // Game mode turned on while it's up: off to the panel at the screen's edge, once (it can still be dragged).
-          const dock = R.sidebar?.dock?.();
+          const dock = !whole && R.sidebar?.dock?.();
           if (dock && !station.atDock && !held && !pen.held) { setStation(dock[0], dock[1]); m.goTo(dock[0], dock[1]); station.moving = true; station.atDock = true; }
           else if (!dock && station.atDock) station.atDock = false;
           if (held && !station.held) station.from = [m.x, m.y];
@@ -1206,18 +1229,27 @@
           }
           station.held = held;
           // A fullscreen game pinned the cursor (host.js): leave the spot beside it or under it, clear of where it's pinned.
-          const pinned = R.game && presence.cursor;
+          const pinned = !whole && R.game && presence.cursor;
           if (pinned && !held && !pen.held && !station.moving && (station.byCursor || Math.hypot(m.x - pinned[0], m.y - pinned[1]) < AVOID())) {
             const [x, y] = pickSpot(presence.cursor?.[0], presence.cursor?.[1], m.x, m.y);
             setStation(x, y); m.goTo(x, y); station.moving = true; station.flee = 0;
           }
+          // Whole-screen stage: stay centered; no cursor follow.
+          if (whole && !held && !pen.held) {
+            fol.on = false; m.drive = null; station.flee = 0;
+            const S = bounds();
+            const cx = (S.l + S.r) / 2, cy = S.t + (S.b - S.t) * 0.40;
+            if (Math.hypot((station.x ?? m.x) - cx, (station.y ?? m.y) - cy) > 4) {
+              setStation(cx, cy); m.x = cx; m.y = cy; m.goTo(cx, cy); station.moving = false;
+            }
+          }
           // Popped up beside the cursor: it goes where the cursor goes (until it's dragged somewhere).
-          if (pen.held) { fol.on = false; m.drive = held ? null : penDrive; station.flee = 0; }
+          else if (pen.held) { fol.on = false; m.drive = held ? null : penDrive; station.flee = 0; }
           else if (!held && station.byCursor && presence.ptr) { follow(env, dt); station.flee = 0; }
           else { fol.on = false; m.drive = null; }
           nativeStep(dt, self);
           // While drawing, stay put: the user's cursor is supposed to come over here.
-          if (!held && env.mouse && !pen.held && !station.byCursor) {
+          if (!whole && !held && env.mouse && !pen.held && !station.byCursor) {
             const cx = env.mouse.x, cy = env.mouse.y, dBody = Math.hypot(cx - m.x, cy - m.y);
             // Pointing right at it or its bubble means "I want this"; hovering around it means "you're in my way".
             const onIt = dBody < m.radius * 1.1 || (b && hitBubble(b, cx, cy));

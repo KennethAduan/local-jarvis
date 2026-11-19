@@ -11,7 +11,13 @@
   const AHEAD = 18, BELOW = 8, BEHIND = 8;
   // Where its top-left goes for a cursor [x, y], its size [w, h] and the room it may use { l, t, r, b }.
   R.askBarPlace = (cursor, size, bounds) => {
-    const [cx, cy] = cursor, [w, h] = size;
+    const [w, h] = size;
+    if (R.wholeScreen) {
+      const x = Math.round((bounds.l + bounds.r - w) / 2);
+      const y = Math.round(bounds.b - h - 24);
+      return [Math.max(bounds.l, x), Math.max(bounds.t, y)];
+    }
+    const [cx, cy] = cursor;
     let x = cx + AHEAD, y = cy + BELOW;
     if (x + w > bounds.r) x = cx - BEHIND - w;
     if (y + h > bounds.b) y = cy - BELOW - h;
