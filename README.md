@@ -61,6 +61,12 @@ In LM Studio on the host PC, enable **Serve on Local Network** and start its API
 JARVIS_LMSTUDIO_URL=http://192.168.1.42:1234/v1 ./showcase/tauri/src-tauri/target/debug/roamies
 ```
 
+For a packaged build in Applications, quit Jarvis and run this command in Terminal with the same LAN address.
+
+```bash
+JARVIS_LMSTUDIO_URL=http://192.168.1.42:1234/v1 /Applications/Jarvis.app/Contents/MacOS/roamies
+```
+
 If the server requires authentication, set `JARVIS_LMSTUDIO_API_TOKEN` in the launch environment too. Without a URL override, Jarvis uses `http://127.0.0.1:1234/v1`.
 
 Agent layout and safety rules: [AGENTS.md](AGENTS.md).

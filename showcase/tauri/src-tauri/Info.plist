@@ -5,6 +5,8 @@
   <!-- Menu bar only: no Dock icon, no app switcher entry, even during launch. -->
   <key>LSUIElement</key>
   <true/>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Jarvis connects to the LM Studio server you choose on your local network.</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>Roamies listens while you hold your talk shortcut.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
