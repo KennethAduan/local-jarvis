@@ -1,6 +1,7 @@
 {
   "bundle": {
     "externalBin": [
+      "binaries/jarvis-kokoro",
       "binaries/roamies-voice",
       "binaries/roamies-hands",
       "binaries/roamies-node"

@@ -7,15 +7,20 @@ cd "$(dirname "$0")"
 rm -rf dist && mkdir -p dist
 cp ../desktop.html dist/
 cp -R ../roamies ../onboarding ../panel dist/
-../tauri/sidecar/bundle.sh
+bash sidecar/bundle.sh
 # Ship a Node.js runtime with the app, for the target being built (--target <triple>, else this machine).
 TARGET=""; prev=""; for a in "$@"; do [ "$prev" = "--target" ] && TARGET="$a"; prev="$a"; done
-../tauri/sidecar/fetch-node.sh ${TARGET:+"$TARGET"}
+bash sidecar/fetch-node.sh ${TARGET:+"$TARGET"}
 # Windows helpers: voice (Parakeet speech on the PC) and hands (windows, capture, UI Automation, OCR); macOS
 # builds its Swift twins in build.rs. Linux has the voice helper only (the same Rust one as Windows).
 # Always optimised: a debug voice build is far too slow at reading speech.
 TRIPLE="${TARGET:-$(rustc -vV | sed -n 's/^host: //p')}"
 case "$TRIPLE" in
+  *-apple-darwin)
+    cargo build --release --locked --manifest-path src-tauri/kokoro/Cargo.toml --target "$TRIPLE"
+    mkdir -p src-tauri/binaries src-tauri/kokoro-runtime/licenses
+    cp "src-tauri/kokoro/target/$TRIPLE/release/jarvis-kokoro" "src-tauri/binaries/jarvis-kokoro-$TRIPLE"
+    cp src-tauri/kokoro/licenses/* src-tauri/kokoro-runtime/licenses/ ;;
   *-windows-*)
     mkdir -p src-tauri/binaries
     bash src-tauri/kokoro/stage-windows.sh "$TRIPLE" "$PWD/src-tauri/kokoro-runtime"

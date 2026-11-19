@@ -58,6 +58,8 @@ pub(crate) fn spawn_sidecar(app: &AppHandle) {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(stderr);
+    #[cfg(target_os = "macos")]
+    cmd.env("JARVIS_KOKORO", helper_binary("jarvis-kokoro").unwrap_or_default());
     // Linux: "x11" or "wayland", for what the sidecar offers and how it words things (platform.mjs).
     // Windows: which program owns the tray icon, so the sidecar can show it next to the clock (wintray.mjs).
     #[cfg(windows)]

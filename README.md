@@ -14,7 +14,8 @@ AGPL-3.0-only ([LICENSE](LICENSE)). This codebase includes work originally publi
 - JARVIS-only appearance; wake name defaults to **Hey Jarvis**
 - Connects to LM Studio at `http://127.0.0.1:1234/v1` (preferred model `qwen/qwen3-4b-2507` when available)
 - Text-only local models get a compact tool set (sketch, open allowlist, reminders, browser helpers)
-- Local Kokoro speech on Windows; automatic updates disabled until this repo has a signed release feed
+- Local Kokoro speech on macOS and Windows. Install the voice pack from **Speaking**.
+- Automatic updates are disabled until this repo has a signed release feed.
 
 ## Build
 

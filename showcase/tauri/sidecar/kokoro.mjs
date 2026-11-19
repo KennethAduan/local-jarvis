@@ -70,8 +70,9 @@ export async function installPack({ dir = modelDir(), assets = KOKORO_ASSETS, fe
   })().finally(() => { installing = null; });
   return installing;
 }
+export const kokoroSupported = (platform = process.platform) => platform === 'darwin' || platform === 'win32';
 export async function kokoroStatus({ dir = modelDir(), executable = process.env.JARVIS_KOKORO, platform = process.platform, reuse = reuseCached } = {}) {
-  if (platform !== 'win32') return { ok: false, reason: 'unavailable', message: 'Local spoken replies are available on Windows in this build.' };
+  if (!kokoroSupported(platform)) return { ok: false, reason: 'unavailable', message: 'Local spoken replies are available on macOS and Windows in this build.' };
   try { if (!executable || !(await fs.stat(executable)).isFile()) throw new Error(); }
   catch { return { ok: false, reason: 'unavailable', message: 'Local voice is unavailable. Reinstall Jarvis.' }; }
   try { if (await reuse({ dir })) return { ok: true, engine: 'Kokoro', voices: KOKORO_VOICES }; }

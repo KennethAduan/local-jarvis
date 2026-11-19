@@ -43,7 +43,7 @@ import { faviconFor } from './draw.mjs';
 import { QUESTIONS, openNote, answerTurn, wantsSkip, endsChat, splitTurn, plain, stripNote, tourBeats, goalFrom, showcaseBeats } from './intro.mjs';
 import { SpeechText, CueFilter, VOICE_CUES, LISTEN_SECS, listenWait, listensAfter } from './speech.mjs';
 import { createSpeaker, voiceProblemText, voiceWhy } from './speaker.mjs';
-import { DEFAULT_KOKORO_VOICE, KokoroVoice, kokoroStatus, kokoroVoice, installPack } from './kokoro.mjs';
+import { DEFAULT_KOKORO_VOICE, KokoroVoice, kokoroStatus, kokoroSupported, kokoroVoice, installPack } from './kokoro.mjs';
 import { LITE_BUDGET, LITE_TOOLS, LITE_TURNS, liteSystem } from './lite.mjs';
 import { pickNotch } from './notch.mjs';
 import { DEFAULT_VOICE, FISH_CHOICES } from './fish.mjs';
@@ -2200,7 +2200,7 @@ async function onMenu(id, via) {
   else if (id.startsWith('studiovoice:')) setStudioVoice(id.slice(12));
   else if (id === 'kokoro_check') { kokoroError = null; await speech.checkLocal(); menu(); if (onboarding) obState(); }
   else if (id === 'kokoro_install') {
-    if (process.platform !== 'win32' || kokoroInstalling) return;
+    if (!kokoroSupported() || kokoroInstalling) return;
     kokoroInstalling = true; kokoroError = null; menu();
     try { await installPack(); } catch (e) { kokoroError = 'Could not install the voice. Check your connection and try again.'; }
     finally { kokoroInstalling = false; await speech.checkLocal(); menu(); }

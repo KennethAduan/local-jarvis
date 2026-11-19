@@ -18,7 +18,7 @@ AGPL-3.0-only, attribution, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 See [README.md](README.md) (includes **Development (debug binary)**). Windows: Git Bash + current MSVC. `npm ci` / `npm test` in `showcase/tauri/sidecar`. Profile import after quit: `node import-profile.mjs --app-stopped --db <path>`.
 
-Windows speech: local **Kokoro** (British George). Model files live in the data directory (SHA-256 checked); not committed.
+macOS and Windows use local **Kokoro** speech (British George). Install the voice pack from **Speaking**. Jarvis checks the model files against SHA-256 hashes and stores them in the data directory.
 
 ### Dev run (Windows)
 

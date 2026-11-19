@@ -62,5 +62,10 @@ try {
  assert.equal(calls, 1);
  await assert.rejects(installPack({ dir:path.join(dir,'bad'), assets, base:'https://example.invalid/', fetchImpl:async () => ({ ok:true, url:'https://example.invalid/one', body:[Buffer.from('bad')] }) }));
  assert.equal((await kokoroStatus({ platform:'linux' })).reason, 'unavailable');
+ for (const platform of ['darwin', 'win32']) {
+   const executable = path.join(source, 'one');
+   assert.equal((await kokoroStatus({ platform, executable, reuse: async () => false })).reason, 'missing');
+   assert.equal((await kokoroStatus({ platform, executable, reuse: async () => true })).ok, true);
+ }
 } finally { await rm(dir, { recursive:true, force:true }); }
 console.log('Kokoro voice and pack passed');
