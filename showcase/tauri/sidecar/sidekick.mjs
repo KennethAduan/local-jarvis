@@ -52,7 +52,7 @@ import { showTrayIcon } from './wintray.mjs';
 import { createActivity } from './activity.mjs';
 import { canCircle, canSnap, cleanMics, talkChords, hasHands, hasHotkeys, hasVoice, linuxSession, micTrouble, needsVoiceModel, platformLine, samePair, seesPointer, writeChord, writeChords } from './platform.mjs';
 import { accountKeys, keyCards, keyKinds, usableByRoamies, signInCards } from './providers.mjs';
-import { AUTO_UPDATES, DATA_ROOT, FORK_DEFAULTS, PREFERRED_MODEL, allowedModel, normalizeForkConfig, localCredentials, forkSecrets, localSketchTools, localSystem, textLocalModel, withoutImages } from './kineto.mjs';
+import { AUTO_UPDATES, DATA_ROOT, FORK_DEFAULTS, PREFERRED_MODEL, allowedModel, normalizeForkConfig, localCredentials, forkSecrets, localBrowserIntent, localSketchTools, localSystem, runLocalBrowserIntent, textLocalModel, withoutImages } from './kineto.mjs';
 import { OLLAMA, LMSTUDIO, connectLocal, contextNote, downNote, forgetLocal, isSmallModel, newServer, noModelsNote, serverFor, serverList, syncLocal as syncServers, withWindow } from './local.mjs';
 import { activityLogs, buildReport, redact, reportDir, reportName, reveal, run, scrubConfig, tail } from './diagnostics.mjs';
 import { detailsText, explain } from './errors.mjs';
@@ -1128,6 +1128,24 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   desk.started(news);
   if (notReady) return say(notReady, 'concerned');
   if (image && textSketchMode()) return say('This model can talk and sketch, but cannot inspect images. Pick a vision model on the Model page to ask about a screen capture.', 'concerned');
+  // Local models (incl. VL with lite off) often explain instead of calling open: handle clear open/search intents here.
+  if (config.provider === 'local' && !image && !intro && !news && localBrowserIntent(text)) {
+    busy = true; quiet = false; autoTurn = null; menu(); holdWake(true);
+    if (!text.startsWith('(')) activity.asked(text);
+    try {
+      // Prefer the compact open wrapper when present; otherwise the real open tool (VL / full tool set).
+      const openTool = (compactMode() ? localSketchTools(tools) : tools).find((t) => t.name === 'open');
+      const msg = await runLocalBrowserIntent(text, (args) => openTool.execute(args, {}));
+      speakLine(msg || 'Opened your browser.');
+      logLine('local_browser_intent', { text: String(text).slice(0, 120), model: config.model });
+    } catch (err) {
+      console.error('local browser intent', err);
+      speakLine(aloud(problem('reply', err, { who: 'Jarvis' })), 'concerned');
+    } finally {
+      busy = false; holdWake(false); menu(); stir();
+    }
+    return;
+  }
   busy = true; quiet = false; autoTurn = null;
   saidPending = true; clearTimeout(saidCap); stir();
   holdWake(true);

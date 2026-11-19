@@ -31,4 +31,6 @@ cd .. && ./build.sh dev
 ./src-tauri/target/debug/roamies.exe
 ```
 
+After sidecar JS edits, from `showcase/tauri` in Git Bash: `./reload-dev.sh` (bundle + restart). Use `./reload-dev.sh --full` when the Rust shell also changed.
+
 Sidecar JS change → rebuild sidecar → restart the debug binary. LM Studio at `http://127.0.0.1:1234`. Quit installed Jarvis first.
